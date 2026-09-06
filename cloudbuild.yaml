@@ -1,0 +1,21 @@
+steps:
+  - name: python:3.12-slim
+    dir: api
+    entrypoint: bash
+    args:
+      - -c
+      - pip install -r requirements.txt && PYTHONPATH=. pytest -q
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/place-memory-api:$COMMIT_SHA
+      - api
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/place-memory-api:$COMMIT_SHA
+
+substitutions:
+  _REGION: us-central1
+  _REPOSITORY: place-memory

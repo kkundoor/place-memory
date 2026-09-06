@@ -49,3 +49,9 @@ The API runs without Google credentials in local stub mode. Real place resolutio
 ## status
 
 Day 1 build. See `docs/field-test-2026-09-07.md` for the first real-world test plan.
+
+## engineering notes
+
+The repository keeps model interpretation separate from tool-grounded facts. The current resolver uses a confidence gate before treating a candidate as canonical, and the feasibility path returns `uncertain` instead of filling in missing hours or routing data.
+
+`pytest` covers the resolver, retrieval fallback, and time-budget policy. GitHub Actions runs the API suite on pushes and pull requests; `cloudbuild.yaml` is the deployment-path build config for GCP.
