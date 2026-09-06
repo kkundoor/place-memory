@@ -40,4 +40,6 @@ def search_memories(memories: list[Memory], query: str) -> list[Memory]:
             scored.append((overlap, memory))
 
     scored.sort(key=lambda item: (item[0], item[1].created_at), reverse=True)
+    if not scored:
+        return resolved
     return [memory for _, memory in scored]

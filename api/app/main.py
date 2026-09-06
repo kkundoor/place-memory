@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.clients.gemini import GeminiExtractor
 from app.clients.google_maps import GoogleMapsClient
 from app.config import get_settings
 from app.models import (
@@ -11,6 +12,7 @@ from app.models import (
     PlaceCandidate,
     PlaceHint,
     ResolutionStatus,
+    SourceType,
 )
 from app.services.feasibility import check_memory
 from app.services.resolver import resolve_hint
@@ -21,6 +23,7 @@ from app.storage.sqlite import MemoryStore
 settings = get_settings()
 store = MemoryStore(settings.database_path)
 maps = GoogleMapsClient(settings.google_maps_api_key)
+extractor = GeminiExtractor(settings)
 
 app = FastAPI(title='place memory api', version='0.1.0')
 app.add_middleware(
@@ -37,6 +40,7 @@ def health() -> dict:
     return {
         'status': 'ok',
         'maps_enabled': maps.enabled,
+        'vertex_enabled': extractor.enabled,
     }
 
 
@@ -49,6 +53,52 @@ def create_memory(data: MemoryCreate) -> Memory:
 def list_memories(q: str = '') -> list[Memory]:
     memories = store.list()
     return search_memories(memories, q) if q else memories
+
+
+@app.post('/api/memories/ingest')
+async def ingest_memory(data: MemoryCreate) -> dict:
+    memory = store.create(data)
+    hint = data.hint or await extractor.extract_text(data.source_text)
+    if not maps.enabled:
+        updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
+        return {'memory': updated, 'candidates': [], 'warning': 'google maps is not configured'}
+
+    status, selected, candidates = await resolve_hint(hint, maps)
+    updated = store.update_resolution(memory.id, hint, selected, status)
+    return {'memory': updated, 'candidates': candidates}
+
+
+@app.post('/api/memories/ingest-image')
+async def ingest_image(
+    image: UploadFile = File(...),
+    source_url: str | None = Form(default=None),
+    note: str | None = Form(default=None),
+) -> dict:
+    if image.content_type not in {'image/jpeg', 'image/png', 'image/webp'}:
+        raise HTTPException(status_code=415, detail='jpeg, png, or webp required')
+    data = await image.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail='image must be under 8 MB')
+
+    try:
+        hint = await extractor.extract_image(data, image.content_type, source_url)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    memory = store.create(MemoryCreate(
+        source_type=SourceType.screenshot,
+        source_text=hint.evidence or hint.name,
+        source_url=source_url,
+        note=note,
+        hint=hint,
+    ))
+    if not maps.enabled:
+        updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
+        return {'memory': updated, 'candidates': [], 'warning': 'google maps is not configured'}
+
+    status, selected, candidates = await resolve_hint(hint, maps)
+    updated = store.update_resolution(memory.id, hint, selected, status)
+    return {'memory': updated, 'candidates': candidates}
 
 
 @app.post('/api/memories/{memory_id}/resolve')

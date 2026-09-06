@@ -1,6 +1,12 @@
-import type { FeasibleMemory, Memory } from '../types';
+import type { FeasibleMemory, Memory, PlaceCandidate } from '../types';
 
 const base = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+type IngestResponse = {
+  memory: Memory;
+  candidates: PlaceCandidate[];
+  warning?: string;
+};
 
 export async function listMemories(): Promise<Memory[]> {
   const response = await fetch(`${base}/api/memories`);
@@ -8,8 +14,8 @@ export async function listMemories(): Promise<Memory[]> {
   return response.json();
 }
 
-export async function createMemory(sourceText: string, sourceUrl: string): Promise<Memory> {
-  const response = await fetch(`${base}/api/memories`, {
+export async function ingestMemory(sourceText: string, sourceUrl: string): Promise<IngestResponse> {
+  const response = await fetch(`${base}/api/memories/ingest`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -18,7 +24,34 @@ export async function createMemory(sourceText: string, sourceUrl: string): Promi
       source_url: sourceUrl || null,
     }),
   });
-  if (!response.ok) throw new Error('could not save memory');
+  if (!response.ok) throw new Error('could not ingest memory');
+  return response.json();
+}
+
+export async function ingestImage(file: File, sourceUrl: string): Promise<IngestResponse> {
+  const body = new FormData();
+  body.append('image', file);
+  if (sourceUrl) body.append('source_url', sourceUrl);
+
+  const response = await fetch(`${base}/api/memories/ingest-image`, {
+    method: 'POST',
+    body,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || 'could not ingest image');
+  }
+  return response.json();
+}
+
+export async function confirmMemory(memory: Memory): Promise<Memory> {
+  if (!memory.place) throw new Error('no candidate to confirm');
+  const response = await fetch(`${base}/api/memories/${memory.id}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(memory.place),
+  });
+  if (!response.ok) throw new Error('could not confirm place');
   return response.json();
 }
 

@@ -77,3 +77,22 @@ button {
   .query-row button { grid-column: 1 / -1; }
   .grid { grid-template-columns: 1fr; }
 }
+
+.file-input {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  color: #65645f;
+  font-size: 13px;
+  cursor: pointer;
+}
+.file-input input { display: none; }
+button:disabled { opacity: .55; cursor: default; }
+button.secondary {
+  margin-top: 10px;
+  background: transparent;
+  color: #334137;
+  border: 1px solid #bfc5bb;
+  padding: 7px 11px;
+  font-size: 12px;
+}

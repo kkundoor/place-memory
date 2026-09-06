@@ -29,3 +29,12 @@ def test_query_filters_to_saved_match():
     results = search_memories([bakery, beach], 'show me a bakery I saved')
 
     assert [item.id for item in results] == ['Carissa']
+
+
+def test_context_only_query_keeps_all_candidates_for_feasibility():
+    bakery = memory('Carissa', 'bakery')
+    beach = memory('Main Beach', 'beach')
+
+    results = search_memories([bakery, beach], 'what can I do in the next 90 minutes?')
+
+    assert {item.id for item in results} == {'Carissa', 'Main Beach'}

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 
 import { MemoryCard } from './components/MemoryCard';
-import { createMemory, getFeasible, listMemories } from './lib/api';
+import { confirmMemory, getFeasible, ingestImage, ingestMemory, listMemories } from './lib/api';
 import type { FeasibleMemory, Memory } from './types';
 import './styles.css';
 
@@ -9,10 +9,12 @@ export default function App() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [sourceText, setSourceText] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
+  const [image, setImage] = useState<File | null>(null);
   const [query, setQuery] = useState('what from my saves is doable now?');
   const [minutes, setMinutes] = useState(120);
   const [results, setResults] = useState<FeasibleMemory[]>([]);
   const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
 
   async function refresh() {
     setMemories(await listMemories());
@@ -24,12 +26,33 @@ export default function App() {
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!sourceText.trim()) return;
-    await createMemory(sourceText.trim(), sourceUrl.trim());
-    setSourceText('');
-    setSourceUrl('');
-    setMessage('saved — resolve step is next');
-    await refresh();
+    if (!sourceText.trim() && !image) return;
+    setBusy(true);
+    setMessage('resolving place...');
+    try {
+      const response = image
+        ? await ingestImage(image, sourceUrl.trim())
+        : await ingestMemory(sourceText.trim(), sourceUrl.trim());
+      setSourceText('');
+      setSourceUrl('');
+      setImage(null);
+      setMessage(response.warning || `saved as ${response.memory.resolution_status}`);
+      await refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'could not save');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirm(memory: Memory) {
+    try {
+      await confirmMemory(memory);
+      setMessage('place confirmed');
+      await refresh();
+    } catch {
+      setMessage('could not confirm place');
+    }
   }
 
   async function checkNow() {
@@ -66,14 +89,22 @@ export default function App() {
           <textarea
             value={sourceText}
             onChange={(event) => setSourceText(event.target.value)}
-            placeholder="paste the place name, screenshot text, or what you remember"
+            placeholder="paste a place, caption, note, or screenshot text"
           />
           <input
             value={sourceUrl}
             onChange={(event) => setSourceUrl(event.target.value)}
             placeholder="source link (optional)"
           />
-          <button type="submit">save</button>
+          <label className="file-input">
+            <span>{image ? image.name : 'or add a screenshot'}</span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(event) => setImage(event.target.files?.[0] || null)}
+            />
+          </label>
+          <button type="submit" disabled={busy}>{busy ? 'working...' : 'save + resolve'}</button>
         </form>
       </section>
 
@@ -110,7 +141,9 @@ export default function App() {
           <span>{memories.length}</span>
         </div>
         <div className="grid">
-          {memories.map((memory) => <MemoryCard key={memory.id} memory={memory} />)}
+          {memories.map((memory) => (
+            <MemoryCard key={memory.id} memory={memory} onConfirm={confirm} />
+          ))}
         </div>
       </section>
     </main>

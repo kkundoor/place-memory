@@ -1,3 +1,11 @@
+export type PlaceHint = {
+  name: string;
+  city_hint?: string | null;
+  address_hint?: string | null;
+  category_hint?: string | null;
+  evidence?: string | null;
+};
+
 export type PlaceCandidate = {
   place_id: string;
   name: string;
@@ -15,6 +23,7 @@ export type Memory = {
   source_url?: string | null;
   note?: string | null;
   resolution_status: 'unresolved' | 'resolved' | 'needs_review';
+  hint?: PlaceHint | null;
   place?: PlaceCandidate | null;
 };
 
