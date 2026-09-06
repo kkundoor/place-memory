@@ -96,3 +96,10 @@ button.secondary {
   padding: 7px 11px;
   font-size: 12px;
 }
+.map {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  border: 1px solid #e1dfd8;
+  border-radius: 14px;
+}

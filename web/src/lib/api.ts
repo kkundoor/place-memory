@@ -74,3 +74,24 @@ export async function getFeasible(
   const data = await response.json();
   return data.results;
 }
+
+
+export async function getMap(
+  query: string,
+  latitude: number,
+  longitude: number,
+  availableMinutes: number,
+): Promise<string> {
+  const response = await fetch(`${base}/api/map`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query,
+      origin: { latitude, longitude },
+      available_minutes: availableMinutes,
+    }),
+  });
+  if (!response.ok) throw new Error('could not load map');
+  const data = await response.json();
+  return `data:image/png;base64,${data.image_base64}`;
+}

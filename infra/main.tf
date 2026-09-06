@@ -41,3 +41,8 @@ resource "google_project_service" "routes" {
   project = var.project_id
   service = "routes.googleapis.com"
 }
+
+resource "google_project_service" "static_maps" {
+  project = var.project_id
+  service = "static-maps-backend.googleapis.com"
+}

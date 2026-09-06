@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 
 import { MemoryCard } from './components/MemoryCard';
-import { confirmMemory, getFeasible, ingestImage, ingestMemory, listMemories } from './lib/api';
+import { confirmMemory, getFeasible, getMap, ingestImage, ingestMemory, listMemories } from './lib/api';
 import type { FeasibleMemory, Memory } from './types';
 import './styles.css';
 
@@ -14,6 +14,7 @@ export default function App() {
   const [minutes, setMinutes] = useState(120);
   const [results, setResults] = useState<FeasibleMemory[]>([]);
   const [message, setMessage] = useState('');
+  const [mapImage, setMapImage] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
@@ -59,13 +60,12 @@ export default function App() {
     setMessage('getting current location...');
     navigator.geolocation.getCurrentPosition(async (position) => {
       try {
-        const next = await getFeasible(
-          query,
-          position.coords.latitude,
-          position.coords.longitude,
-          minutes,
-        );
+        const [next, nextMap] = await Promise.all([
+          getFeasible(query, position.coords.latitude, position.coords.longitude, minutes),
+          getMap(query, position.coords.latitude, position.coords.longitude, minutes),
+        ]);
         setResults(next);
+        setMapImage(nextMap);
         setMessage('');
       } catch {
         setMessage('could not check right now');
@@ -123,6 +123,7 @@ export default function App() {
           <button onClick={checkNow}>check</button>
         </div>
         {message && <p className="message">{message}</p>}
+        {mapImage && <img className="map" src={mapImage} alt="Saved places near the current location" />}
         <div className="results">
           {results.map((result) => (
             <article className="result-card" key={result.memory.id}>

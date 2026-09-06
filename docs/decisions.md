@@ -29,3 +29,9 @@
 **decision:** screenshot/text/note plus optional source url is enough for the first test.
 
 **why:** supporting every social platform before measuring place-resolution quality would hide the core risk behind integration work.
+
+## 006 - map image is proxied through the api
+
+**decision:** v1 renders the current saved-place set through the Maps Static API and proxies the image through the backend.
+
+**why:** the browser does not need the server Maps API key, and precise current-location coordinates are sent in a POST body instead of a map URL that is more likely to leak into client history or normal request logs.

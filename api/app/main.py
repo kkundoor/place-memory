@@ -1,3 +1,5 @@
+import base64
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -145,3 +147,20 @@ async def feasible(data: FeasibilityRequest) -> FeasibilityResponse:
         result.travel_minutes if result.travel_minutes is not None else 10**9,
     ))
     return FeasibilityResponse(results=results)
+
+
+@app.post('/api/map')
+async def map_image(data: FeasibilityRequest) -> dict:
+    memories = search_memories(store.list(), data.query)
+    coordinates = [
+        (memory.place.latitude, memory.place.longitude)
+        for memory in memories
+        if memory.place
+    ]
+    image = await maps.static_map(data.origin, coordinates)
+    if image is None:
+        raise HTTPException(status_code=503, detail='google maps is not configured')
+    return {
+        'image_base64': base64.b64encode(image).decode('ascii'),
+        'count': len(coordinates),
+    }

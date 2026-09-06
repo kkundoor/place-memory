@@ -96,6 +96,29 @@ class GoogleMapsClient:
         hours = data.get('currentOpeningHours') or {}
         return PlaceStatus(open_now=hours.get('openNow'))
 
+
+    async def static_map(self, origin: Origin, places: list[tuple[float, float]]) -> bytes | None:
+        if not self.enabled:
+            return None
+
+        params: list[tuple[str, str]] = [
+            ('size', '640x360'),
+            ('scale', '2'),
+            ('maptype', 'roadmap'),
+            ('key', self.api_key),
+            ('markers', f'label:U|{origin.latitude},{origin.longitude}'),
+        ]
+        for latitude, longitude in places[:12]:
+            params.append(('markers', f'{latitude},{longitude}'))
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(
+                'https://maps.googleapis.com/maps/api/staticmap',
+                params=params,
+            )
+            response.raise_for_status()
+            return response.content
+
     async def route(self, origin: Origin, place_id: str) -> RouteInfo:
         if not self.enabled:
             return RouteInfo(duration_seconds=None, distance_meters=None)
