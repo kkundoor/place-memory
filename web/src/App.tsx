@@ -60,13 +60,18 @@ export default function App() {
     setMessage('getting current location...');
     navigator.geolocation.getCurrentPosition(async (position) => {
       try {
-        const [next, nextMap] = await Promise.all([
-          getFeasible(query, position.coords.latitude, position.coords.longitude, minutes),
-          getMap(query, position.coords.latitude, position.coords.longitude, minutes),
-        ]);
+        const next = await getFeasible(
+          query,
+          position.coords.latitude,
+          position.coords.longitude,
+          minutes,
+        );
         setResults(next);
-        setMapImage(nextMap);
         setMessage('');
+
+        getMap(query, position.coords.latitude, position.coords.longitude, minutes)
+          .then(setMapImage)
+          .catch(() => setMapImage(''));
       } catch {
         setMessage('could not check right now');
       }
