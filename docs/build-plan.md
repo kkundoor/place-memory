@@ -92,3 +92,17 @@ After the test, fix failures in this order:
 - polished animations
 
 The project should first prove that a personal save can be resolved correctly and turned into a grounded, useful decision in the real world.
+
+## checkpoint - 2026-09-09
+
+Offline hardening completed before live cloud integration:
+
+- retrieval no longer returns every saved place for a specific unmatched query
+- feasibility checks run concurrently with a bounded fan-out
+- ambiguous resolver candidates persist across restarts for manual review
+- manual confirmation trusts the stored candidate snapshot instead of client-supplied fields
+- request tracing captures ids, status, and latency without logging query text
+- mocked Places / Routes contract tests cover request shape and response parsing
+- SQLite migration keeps pre-candidate local databases usable
+
+Next critical path remains unchanged: configure GCP, run real screenshots through Vertex + Places, then validate live hours/routes from a real location.

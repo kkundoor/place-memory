@@ -48,10 +48,10 @@ The API runs without Google credentials in local stub mode. Real place resolutio
 
 ## status
 
-Day 1 build. See `docs/field-test-2026-09-07.md` for the first real-world test plan.
+The offline vertical slice is working end to end: ingest, review, persistence, retrieval, and deterministic feasibility all run without cloud credentials. Live Places, Routes, and Vertex integration is the next checkpoint. See `docs/field-test-2026-09-07.md` for the original real-world test plan.
 
 ## engineering notes
 
 The repository keeps model interpretation separate from tool-grounded facts. The current resolver uses a confidence gate before treating a candidate as canonical, and the feasibility path returns `uncertain` instead of filling in missing hours or routing data.
 
-`pytest` covers the resolver, retrieval fallback, and time-budget policy. GitHub Actions runs the API suite on pushes and pull requests; `cloudbuild.yaml` is the deployment-path build config for GCP.
+`pytest` covers resolution confidence, candidate review persistence, retrieval misses, time-budget policy, Google Maps request contracts, schema migration, and local API flow. Feasibility checks are concurrency-bounded, and request tracing records only method/path/status/latency metadata rather than query content. GitHub Actions runs the API suite on pushes and pull requests; `cloudbuild.yaml` is the deployment-path build config for GCP.
