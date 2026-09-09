@@ -9,10 +9,19 @@ STOP = {
     'something', 'that', 'the', 'this', 'to', 'what', 'which', 'with',
 }
 
+CONTEXT = {
+    'available', 'close', 'doable', 'hour', 'hours', 'minute', 'minutes', 'nearby',
+    'next', 'now', 'today', 'tonight', 'visit',
+}
+
 
 def _terms(text: str) -> set[str]:
     words = re.findall(r'[a-z0-9]+', text.lower())
     return {word for word in words if word not in STOP and len(word) > 1}
+
+
+def _context_only(terms: set[str]) -> bool:
+    return bool(terms) and all(term in CONTEXT or term.isdigit() for term in terms)
 
 
 def search_memories(memories: list[Memory], query: str) -> list[Memory]:
@@ -41,5 +50,5 @@ def search_memories(memories: list[Memory], query: str) -> list[Memory]:
 
     scored.sort(key=lambda item: (item[0], item[1].created_at), reverse=True)
     if not scored:
-        return resolved
+        return resolved if _context_only(query_terms) else []
     return [memory for _, memory in scored]

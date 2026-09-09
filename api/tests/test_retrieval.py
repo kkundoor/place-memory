@@ -38,3 +38,21 @@ def test_context_only_query_keeps_all_candidates_for_feasibility():
     results = search_memories([bakery, beach], 'what can I do in the next 90 minutes?')
 
     assert {item.id for item in results} == {'Carissa', 'Main Beach'}
+
+
+def test_specific_query_with_no_match_does_not_return_everything():
+    bakery = memory('Carissa', 'bakery')
+    beach = memory('Main Beach', 'beach')
+
+    results = search_memories([bakery, beach], 'show me a coffee shop I saved')
+
+    assert results == []
+
+
+def test_context_query_can_include_numeric_time_budget():
+    bakery = memory('Carissa', 'bakery')
+    beach = memory('Main Beach', 'beach')
+
+    results = search_memories([bakery, beach], 'what is doable nearby in the next 90 minutes?')
+
+    assert {item.id for item in results} == {'Carissa', 'Main Beach'}
