@@ -47,6 +47,19 @@ def score_candidate(hint: PlaceHint, place: RawPlace) -> PlaceCandidate:
     )
 
 
+def decide_resolution(
+    ranked: list[PlaceCandidate],
+) -> tuple[ResolutionStatus, PlaceCandidate | None]:
+    if not ranked:
+        return ResolutionStatus.unresolved, None
+
+    top = ranked[0]
+    gap = top.confidence - ranked[1].confidence if len(ranked) > 1 else 1.0
+    if top.confidence < RESOLVE_THRESHOLD or gap < AMBIGUITY_GAP:
+        return ResolutionStatus.needs_review, top
+    return ResolutionStatus.resolved, top
+
+
 async def resolve_hint(
     hint: PlaceHint,
     client: GoogleMapsClient,
@@ -57,11 +70,5 @@ async def resolve_hint(
         key=lambda item: item.confidence,
         reverse=True,
     )
-    if not ranked:
-        return ResolutionStatus.unresolved, None, []
-
-    top = ranked[0]
-    gap = top.confidence - ranked[1].confidence if len(ranked) > 1 else 1.0
-    if top.confidence < RESOLVE_THRESHOLD or gap < AMBIGUITY_GAP:
-        return ResolutionStatus.needs_review, top, ranked
-    return ResolutionStatus.resolved, top, ranked
+    status, selected = decide_resolution(ranked)
+    return status, selected, ranked
