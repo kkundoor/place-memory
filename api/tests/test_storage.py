@@ -77,3 +77,34 @@ def test_resolution_candidates_survive_store_restart(tmp_path):
     assert saved is not None
     assert saved.resolution_status == ResolutionStatus.needs_review
     assert [item.place_id for item in saved.candidates] == ['bar', 'cafe']
+
+
+def test_store_migrates_pre_candidate_schema(tmp_path):
+    import sqlite3
+
+    path = tmp_path / 'legacy.db'
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            '''
+            create table memories (
+                id text primary key,
+                source_type text not null,
+                source_text text not null,
+                source_url text,
+                note text,
+                created_at text not null,
+                resolution_status text not null,
+                hint_json text,
+                place_json text
+            )
+            '''
+        )
+
+    store = MemoryStore(str(path))
+    memory = store.create(MemoryCreate(source_text='legacy schema still works'))
+
+    with sqlite3.connect(path) as conn:
+        columns = {row[1] for row in conn.execute('pragma table_info(memories)').fetchall()}
+
+    assert 'candidates_json' in columns
+    assert store.get(memory.id).candidates == []
