@@ -16,7 +16,7 @@ from app.models import (
     ResolutionStatus,
     SourceType,
 )
-from app.services.feasibility import check_memory
+from app.services.feasibility import check_memories
 from app.services.resolver import resolve_hint
 from app.services.retrieval import search_memories
 from app.storage.sqlite import MemoryStore
@@ -137,15 +137,13 @@ def confirm_memory(memory_id: str, candidate: PlaceCandidate) -> Memory:
 @app.post('/api/feasible', response_model=FeasibilityResponse)
 async def feasible(data: FeasibilityRequest) -> FeasibilityResponse:
     memories = search_memories(store.list(), data.query)
-    results = [
-        await check_memory(memory, data.origin, data.available_minutes, data.visit_minutes, maps)
-        for memory in memories
-    ]
-    order = {'yes': 0, 'uncertain': 1, 'no': 2}
-    results.sort(key=lambda result: (
-        order[result.status],
-        result.travel_minutes if result.travel_minutes is not None else 10**9,
-    ))
+    results = await check_memories(
+        memories,
+        data.origin,
+        data.available_minutes,
+        data.visit_minutes,
+        maps,
+    )
     return FeasibilityResponse(results=results)
 
 

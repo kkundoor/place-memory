@@ -98,3 +98,44 @@ async def test_hours_failure_returns_uncertain_with_route_evidence():
     assert result.status == 'uncertain'
     assert result.travel_minutes == 10
     assert 'opening status check failed' in result.reasons
+
+
+@pytest.mark.asyncio
+async def test_batch_checks_sort_yes_before_uncertain_before_no():
+    from app.services.feasibility import check_memories
+
+    class MixedMaps:
+        async def get_status(self, place_id):
+            if place_id == 'closed':
+                return PlaceStatus(open_now=False)
+            if place_id == 'unknown':
+                return PlaceStatus(open_now=None)
+            return PlaceStatus(open_now=True)
+
+        async def route(self, origin, place_id):
+            seconds = {'near': 300, 'far': 1200, 'unknown': 600, 'closed': 300}[place_id]
+            return RouteInfo(duration_seconds=seconds, distance_meters=5000)
+
+    memories = []
+    for place_id in ['closed', 'unknown', 'far', 'near']:
+        item = saved_place().model_copy(deep=True)
+        item.id = place_id
+        item.place.place_id = place_id
+        item.place.name = place_id
+        memories.append(item)
+
+    results = await check_memories(
+        memories,
+        Origin(latitude=40, longitude=-72),
+        available_minutes=90,
+        visit_minutes=45,
+        maps=MixedMaps(),
+        max_concurrency=2,
+    )
+
+    assert [(item.memory.id, item.status) for item in results] == [
+        ('near', 'yes'),
+        ('far', 'yes'),
+        ('unknown', 'uncertain'),
+        ('closed', 'no'),
+    ]

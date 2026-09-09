@@ -73,3 +73,28 @@ async def check_memory(
         open_now=open_now,
         reasons=reasons,
     )
+
+
+async def check_memories(
+    memories: list[Memory],
+    origin: Origin,
+    available_minutes: int,
+    visit_minutes: int,
+    maps: GoogleMapsClient,
+    max_concurrency: int = 4,
+) -> list[FeasibleMemory]:
+    semaphore = asyncio.Semaphore(max(1, max_concurrency))
+
+    async def guarded(memory: Memory) -> FeasibleMemory:
+        async with semaphore:
+            return await check_memory(memory, origin, available_minutes, visit_minutes, maps)
+
+    results = await asyncio.gather(*(guarded(memory) for memory in memories))
+    order = {'yes': 0, 'uncertain': 1, 'no': 2}
+    return sorted(
+        results,
+        key=lambda result: (
+            order[result.status],
+            result.travel_minutes if result.travel_minutes is not None else 10**9,
+        ),
+    )
