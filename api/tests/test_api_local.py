@@ -121,3 +121,103 @@ def test_review_candidates_are_persisted(client, monkeypatch):
     listed = client.get('/api/memories').json()
     saved = next(item for item in listed if item['id'] == memory['id'])
     assert [item['place_id'] for item in saved['candidates']] == ['bar', 'cafe']
+
+
+def test_confirm_uses_stored_candidate_instead_of_client_fields(client, monkeypatch):
+    from app.clients.google_maps import RawPlace
+
+    class ReviewMaps:
+        enabled = True
+
+        async def search_places(self, hint):
+            return [
+                RawPlace(
+                    place_id='bar',
+                    name='The Point Bar',
+                    formatted_address='Southampton, NY',
+                    latitude=40.89,
+                    longitude=-72.39,
+                    primary_type='bar',
+                    types=['bar'],
+                ),
+                RawPlace(
+                    place_id='cafe',
+                    name='The Point Cafe',
+                    formatted_address='Southampton, NY',
+                    latitude=40.89,
+                    longitude=-72.39,
+                    primary_type='cafe',
+                    types=['cafe'],
+                ),
+            ]
+
+    monkeypatch.setattr(main, 'maps', ReviewMaps())
+    ingest = client.post('/api/memories/ingest', json={
+        'source_text': 'The Point in Southampton',
+        'hint': {'name': 'The Point', 'city_hint': 'Southampton'},
+    }).json()
+    memory_id = ingest['memory']['id']
+
+    confirm = client.post(f'/api/memories/{memory_id}/confirm', json={
+        'place_id': 'cafe',
+        'name': 'tampered name',
+        'formatted_address': 'wrong address',
+        'latitude': 0,
+        'longitude': 0,
+        'confidence': 0.1,
+    })
+
+    assert confirm.status_code == 200
+    place = confirm.json()['place']
+    assert place['name'] == 'The Point Cafe'
+    assert place['formatted_address'] == 'Southampton, NY'
+    assert place['latitude'] == 40.89
+    assert place['confidence'] == 1.0
+    assert place['confidence_reasons'][-1] == 'confirmed by user'
+
+
+def test_confirm_rejects_candidate_that_was_not_offered(client, monkeypatch):
+    from app.clients.google_maps import RawPlace
+
+    class ReviewMaps:
+        enabled = True
+
+        async def search_places(self, hint):
+            return [
+                RawPlace(
+                    place_id='bar',
+                    name='The Point Bar',
+                    formatted_address='Southampton, NY',
+                    latitude=40.89,
+                    longitude=-72.39,
+                    primary_type='bar',
+                    types=['bar'],
+                ),
+                RawPlace(
+                    place_id='cafe',
+                    name='The Point Cafe',
+                    formatted_address='Southampton, NY',
+                    latitude=40.89,
+                    longitude=-72.39,
+                    primary_type='cafe',
+                    types=['cafe'],
+                ),
+            ]
+
+    monkeypatch.setattr(main, 'maps', ReviewMaps())
+    ingest = client.post('/api/memories/ingest', json={
+        'source_text': 'The Point in Southampton',
+        'hint': {'name': 'The Point', 'city_hint': 'Southampton'},
+    }).json()
+    memory_id = ingest['memory']['id']
+
+    confirm = client.post(f'/api/memories/{memory_id}/confirm', json={
+        'place_id': 'not-offered',
+        'name': 'Other Place',
+        'latitude': 0,
+        'longitude': 0,
+        'confidence': 0.1,
+    })
+
+    assert confirm.status_code == 400
+    assert confirm.json()['detail'] == 'candidate was not offered for review'

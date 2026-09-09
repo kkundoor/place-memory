@@ -123,11 +123,28 @@ def confirm_memory(memory_id: str, candidate: PlaceCandidate) -> Memory:
     memory = store.get(memory_id)
     if not memory or not memory.hint:
         raise HTTPException(status_code=404, detail='memory or hint not found')
+
+    if memory.candidates:
+        selected = next(
+            (item for item in memory.candidates if item.place_id == candidate.place_id),
+            None,
+        )
+        if not selected:
+            raise HTTPException(status_code=400, detail='candidate was not offered for review')
+    elif settings.app_env == 'local':
+        selected = candidate
+    else:
+        raise HTTPException(status_code=409, detail='no stored candidates available for confirmation')
+
     updated = store.update_resolution(
         memory_id,
         memory.hint,
-        candidate.model_copy(update={'confidence': 1.0}),
+        selected.model_copy(update={
+            'confidence': 1.0,
+            'confidence_reasons': [*selected.confidence_reasons, 'confirmed by user'],
+        }),
         ResolutionStatus.resolved,
+        memory.candidates,
     )
     if not updated:
         raise HTTPException(status_code=404, detail='memory not found')
