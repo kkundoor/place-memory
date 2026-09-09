@@ -25,6 +25,7 @@ export type Memory = {
   resolution_status: 'unresolved' | 'resolved' | 'needs_review';
   hint?: PlaceHint | null;
   place?: PlaceCandidate | null;
+  candidates: PlaceCandidate[];
 };
 
 export type FeasibleMemory = {

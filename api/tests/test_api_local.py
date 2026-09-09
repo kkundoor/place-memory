@@ -76,3 +76,48 @@ def test_local_feasibility_is_uncertain_without_live_maps(client):
     assert result['status'] == 'uncertain'
     assert 'travel time unavailable' in result['reasons']
     assert 'live opening status unavailable' in result['reasons']
+
+
+def test_review_candidates_are_persisted(client, monkeypatch):
+    from app.clients.google_maps import RawPlace
+
+    class ReviewMaps:
+        enabled = True
+
+        async def search_places(self, hint):
+            return [
+                RawPlace(
+                    place_id='bar',
+                    name='The Point Bar',
+                    formatted_address='Southampton, NY',
+                    latitude=40.89,
+                    longitude=-72.39,
+                    primary_type='bar',
+                    types=['bar'],
+                ),
+                RawPlace(
+                    place_id='cafe',
+                    name='The Point Cafe',
+                    formatted_address='Southampton, NY',
+                    latitude=40.89,
+                    longitude=-72.39,
+                    primary_type='cafe',
+                    types=['cafe'],
+                ),
+            ]
+
+    monkeypatch.setattr(main, 'maps', ReviewMaps())
+    response = client.post('/api/memories/ingest', json={
+        'source_type': 'note',
+        'source_text': 'The Point in Southampton',
+        'hint': {'name': 'The Point', 'city_hint': 'Southampton'},
+    })
+
+    assert response.status_code == 200
+    memory = response.json()['memory']
+    assert memory['resolution_status'] == 'needs_review'
+    assert [item['place_id'] for item in memory['candidates']] == ['bar', 'cafe']
+
+    listed = client.get('/api/memories').json()
+    saved = next(item for item in listed if item['id'] == memory['id'])
+    assert [item['place_id'] for item in saved['candidates']] == ['bar', 'cafe']

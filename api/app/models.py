@@ -32,9 +32,9 @@ class PlaceCandidate(BaseModel):
     latitude: float
     longitude: float
     primary_type: str | None = None
-    types: list[str] = []
+    types: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0, le=1)
-    confidence_reasons: list[str] = []
+    confidence_reasons: list[str] = Field(default_factory=list)
 
 
 class MemoryCreate(BaseModel):
@@ -55,6 +55,7 @@ class Memory(BaseModel):
     resolution_status: ResolutionStatus
     hint: PlaceHint | None = None
     place: PlaceCandidate | None = None
+    candidates: list[PlaceCandidate] = Field(default_factory=list)
 
 
 class Origin(BaseModel):
@@ -75,7 +76,7 @@ class FeasibleMemory(BaseModel):
     travel_minutes: int | None = None
     distance_meters: int | None = None
     open_now: bool | None = None
-    reasons: list[str]
+    reasons: list[str] = Field(default_factory=list)
 
 
 class FeasibilityResponse(BaseModel):

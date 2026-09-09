@@ -66,7 +66,7 @@ async def ingest_memory(data: MemoryCreate) -> dict:
         return {'memory': updated, 'candidates': [], 'warning': 'google maps is not configured'}
 
     status, selected, candidates = await resolve_hint(hint, maps)
-    updated = store.update_resolution(memory.id, hint, selected, status)
+    updated = store.update_resolution(memory.id, hint, selected, status, candidates)
     return {'memory': updated, 'candidates': candidates}
 
 
@@ -99,7 +99,7 @@ async def ingest_image(
         return {'memory': updated, 'candidates': [], 'warning': 'google maps is not configured'}
 
     status, selected, candidates = await resolve_hint(hint, maps)
-    updated = store.update_resolution(memory.id, hint, selected, status)
+    updated = store.update_resolution(memory.id, hint, selected, status, candidates)
     return {'memory': updated, 'candidates': candidates}
 
 
@@ -111,7 +111,7 @@ async def resolve_memory(memory_id: str, hint: PlaceHint) -> dict:
         raise HTTPException(status_code=503, detail='google maps is not configured')
 
     status, selected, candidates = await resolve_hint(hint, maps)
-    memory = store.update_resolution(memory_id, hint, selected, status)
+    memory = store.update_resolution(memory_id, hint, selected, status, candidates)
     return {
         'memory': memory,
         'candidates': candidates,

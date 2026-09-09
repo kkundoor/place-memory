@@ -44,12 +44,11 @@ export async function ingestImage(file: File, sourceUrl: string): Promise<Ingest
   return response.json();
 }
 
-export async function confirmMemory(memory: Memory): Promise<Memory> {
-  if (!memory.place) throw new Error('no candidate to confirm');
+export async function confirmMemory(memory: Memory, candidate: PlaceCandidate): Promise<Memory> {
   const response = await fetch(`${base}/api/memories/${memory.id}/confirm`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(memory.place),
+    body: JSON.stringify(candidate),
   });
   if (!response.ok) throw new Error('could not confirm place');
   return response.json();

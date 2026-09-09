@@ -1,12 +1,14 @@
-import type { Memory } from '../types';
+import type { Memory, PlaceCandidate } from '../types';
 
 export function MemoryCard({
   memory,
   onConfirm,
 }: {
   memory: Memory;
-  onConfirm: (memory: Memory) => void;
+  onConfirm: (memory: Memory, candidate: PlaceCandidate) => void;
 }) {
+  const candidates = memory.candidates.length ? memory.candidates : memory.place ? [memory.place] : [];
+
   return (
     <article className="memory-card">
       <div className="memory-topline">
@@ -18,8 +20,20 @@ export function MemoryCard({
       {memory.place && (
         <p className="muted">confidence {Math.round(memory.place.confidence * 100)}%</p>
       )}
-      {memory.resolution_status === 'needs_review' && memory.place && (
-        <button className="secondary" onClick={() => onConfirm(memory)}>confirm this place</button>
+      {memory.resolution_status === 'needs_review' && candidates.length > 0 && (
+        <div className="candidate-list">
+          <p className="muted">choose the right match</p>
+          {candidates.map((candidate) => (
+            <button
+              className="secondary candidate"
+              key={candidate.place_id}
+              onClick={() => onConfirm(memory, candidate)}
+            >
+              <span>{candidate.name}</span>
+              {candidate.formatted_address && <small>{candidate.formatted_address}</small>}
+            </button>
+          ))}
+        </div>
       )}
     </article>
   );

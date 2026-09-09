@@ -37,3 +37,43 @@ def test_memory_round_trip_survives_store_restart(tmp_path):
     assert saved.place.place_id == 'place-1'
     assert saved.place.confidence_reasons == ['name=1.00', 'location=0.90']
     assert saved.note == 'try this weekend'
+
+
+def test_resolution_candidates_survive_store_restart(tmp_path):
+    path = tmp_path / 'candidate-memory.db'
+    store = MemoryStore(str(path))
+    hint = PlaceHint(name='The Point', city_hint='Southampton')
+    memory = store.create(MemoryCreate(source_text='The Point in Southampton', hint=hint))
+    candidates = [
+        PlaceCandidate(
+            place_id='bar',
+            name='The Point Bar',
+            formatted_address='Southampton, NY',
+            latitude=40.89,
+            longitude=-72.39,
+            primary_type='bar',
+            confidence=0.72,
+        ),
+        PlaceCandidate(
+            place_id='cafe',
+            name='The Point Cafe',
+            formatted_address='Southampton, NY',
+            latitude=40.89,
+            longitude=-72.39,
+            primary_type='cafe',
+            confidence=0.70,
+        ),
+    ]
+    store.update_resolution(
+        memory.id,
+        hint,
+        candidates[0],
+        ResolutionStatus.needs_review,
+        candidates,
+    )
+
+    saved = MemoryStore(str(path)).get(memory.id)
+
+    assert saved is not None
+    assert saved.resolution_status == ResolutionStatus.needs_review
+    assert [item.place_id for item in saved.candidates] == ['bar', 'cafe']

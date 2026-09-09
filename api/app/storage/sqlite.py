@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -30,10 +32,14 @@ class MemoryStore:
                     created_at text not null,
                     resolution_status text not null,
                     hint_json text,
-                    place_json text
+                    place_json text,
+                    candidates_json text
                 )
                 '''
             )
+            columns = {row['name'] for row in conn.execute('pragma table_info(memories)').fetchall()}
+            if 'candidates_json' not in columns:
+                conn.execute('alter table memories add column candidates_json text')
 
     def create(self, data: MemoryCreate) -> Memory:
         memory = Memory(
@@ -65,6 +71,7 @@ class MemoryStore:
         hint: PlaceHint,
         place: PlaceCandidate | None,
         status: ResolutionStatus,
+        candidates: list[PlaceCandidate] | None = None,
     ) -> Memory | None:
         memory = self.get(memory_id)
         if not memory:
@@ -73,6 +80,7 @@ class MemoryStore:
             'hint': hint,
             'place': place,
             'resolution_status': status,
+            'candidates': memory.candidates if candidates is None else candidates,
         })
         self._write(updated)
         return updated
@@ -80,13 +88,14 @@ class MemoryStore:
     def _write(self, memory: Memory) -> None:
         hint_json = memory.hint.model_dump_json() if memory.hint else None
         place_json = memory.place.model_dump_json() if memory.place else None
+        candidates_json = json.dumps([item.model_dump() for item in memory.candidates])
         with self._connect() as conn:
             conn.execute(
                 '''
                 insert or replace into memories (
                     id, source_type, source_text, source_url, note, created_at,
-                    resolution_status, hint_json, place_json
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    resolution_status, hint_json, place_json, candidates_json
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''',
                 (
                     memory.id,
@@ -98,6 +107,7 @@ class MemoryStore:
                     memory.resolution_status.value,
                     hint_json,
                     place_json,
+                    candidates_json,
                 ),
             )
 
@@ -105,6 +115,10 @@ class MemoryStore:
     def _from_row(row: sqlite3.Row) -> Memory:
         hint = PlaceHint.model_validate_json(row['hint_json']) if row['hint_json'] else None
         place = PlaceCandidate.model_validate_json(row['place_json']) if row['place_json'] else None
+        candidates = [
+            PlaceCandidate.model_validate(item)
+            for item in json.loads(row['candidates_json'] or '[]')
+        ]
         return Memory(
             id=row['id'],
             source_type=SourceType(row['source_type']),
@@ -115,4 +129,5 @@ class MemoryStore:
             resolution_status=ResolutionStatus(row['resolution_status']),
             hint=hint,
             place=place,
+            candidates=candidates,
         )

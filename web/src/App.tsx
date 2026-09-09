@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 
 import { MemoryCard } from './components/MemoryCard';
 import { confirmMemory, getFeasible, getMap, ingestImage, ingestMemory, listMemories } from './lib/api';
-import type { FeasibleMemory, Memory } from './types';
+import type { FeasibleMemory, Memory, PlaceCandidate } from './types';
 import './styles.css';
 
 export default function App() {
@@ -46,9 +46,9 @@ export default function App() {
     }
   }
 
-  async function confirm(memory: Memory) {
+  async function confirm(memory: Memory, candidate: PlaceCandidate) {
     try {
-      await confirmMemory(memory);
+      await confirmMemory(memory, candidate);
       setMessage('place confirmed');
       await refresh();
     } catch {
