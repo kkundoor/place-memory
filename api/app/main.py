@@ -1,4 +1,7 @@
 import base64
+import logging
+import time
+from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +25,8 @@ from app.services.retrieval import search_memories
 from app.storage.sqlite import MemoryStore
 
 
+logger = logging.getLogger('place_memory.api')
+
 settings = get_settings()
 store = MemoryStore(settings.database_path)
 maps = GoogleMapsClient(settings.google_maps_api_key)
@@ -35,6 +40,24 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+
+@app.middleware('http')
+async def request_metadata(request, call_next):
+    request_id = request.headers.get('x-request-id') or str(uuid4())
+    started = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = round((time.perf_counter() - started) * 1000, 2)
+    response.headers['x-request-id'] = request_id
+    logger.info(
+        'request_complete request_id=%s method=%s path=%s status=%s duration_ms=%s',
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    return response
 
 
 @app.get('/health')

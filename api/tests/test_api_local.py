@@ -221,3 +221,15 @@ def test_confirm_rejects_candidate_that_was_not_offered(client, monkeypatch):
 
     assert confirm.status_code == 400
     assert confirm.json()['detail'] == 'candidate was not offered for review'
+
+
+def test_request_metadata_adds_trace_id_without_echoing_query(client, caplog):
+    caplog.set_level('INFO', logger='place_memory.api')
+    response = client.get('/api/memories?q=private-trip-note', headers={'x-request-id': 'test-request'})
+
+    assert response.status_code == 200
+    assert response.headers['x-request-id'] == 'test-request'
+    log_text = ' '.join(record.getMessage() for record in caplog.records)
+    assert 'request_id=test-request' in log_text
+    assert 'path=/api/memories' in log_text
+    assert 'private-trip-note' not in log_text
