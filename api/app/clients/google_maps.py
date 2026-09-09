@@ -28,9 +28,15 @@ class RouteInfo:
 
 
 class GoogleMapsClient:
-    def __init__(self, api_key: str, timeout: float = 8.0):
+    def __init__(
+        self,
+        api_key: str,
+        timeout: float = 8.0,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
         self.api_key = api_key
         self.timeout = timeout
+        self.transport = transport
 
     @property
     def enabled(self) -> bool:
@@ -55,7 +61,7 @@ class GoogleMapsClient:
         }
         body = {'textQuery': query, 'maxResultCount': 5}
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
             response = await client.post(
                 'https://places.googleapis.com/v1/places:searchText',
                 headers=headers,
@@ -89,7 +95,7 @@ class GoogleMapsClient:
             'X-Goog-FieldMask': 'currentOpeningHours.openNow',
         }
         url = f'https://places.googleapis.com/v1/places/{place_id}'
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
@@ -111,7 +117,7 @@ class GoogleMapsClient:
         for latitude, longitude in places[:12]:
             params.append(('markers', f'{latitude},{longitude}'))
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
             response = await client.get(
                 'https://maps.googleapis.com/maps/api/staticmap',
                 params=params,
@@ -141,7 +147,7 @@ class GoogleMapsClient:
             'travelMode': 'DRIVE',
             'routingPreference': 'TRAFFIC_AWARE',
         }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
             response = await client.post(
                 'https://routes.googleapis.com/directions/v2:computeRoutes',
                 headers=headers,
