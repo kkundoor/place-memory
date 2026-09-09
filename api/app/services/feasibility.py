@@ -15,47 +15,61 @@ async def check_memory(
     if not memory.place:
         return FeasibleMemory(memory=memory, status='uncertain', reasons=['place is unresolved'])
 
-    status_task = maps.get_status(memory.place.place_id)
-    route_task = maps.route(origin, memory.place.place_id)
-    place_status, route = await asyncio.gather(status_task, route_task)
+    status_result, route_result = await asyncio.gather(
+        maps.get_status(memory.place.place_id),
+        maps.route(origin, memory.place.place_id),
+        return_exceptions=True,
+    )
 
-    travel_minutes = math.ceil(route.duration_seconds / 60) if route.duration_seconds is not None else None
+    status_failed = isinstance(status_result, BaseException)
+    route_failed = isinstance(route_result, BaseException)
+    open_now = None if status_failed else status_result.open_now
+    duration_seconds = None if route_failed else route_result.duration_seconds
+    distance_meters = None if route_failed else route_result.distance_meters
+    travel_minutes = math.ceil(duration_seconds / 60) if duration_seconds is not None else None
     reasons = []
 
-    if place_status.open_now is False:
+    if status_failed:
+        reasons.append('opening status check failed')
+    if route_failed:
+        reasons.append('route check failed')
+
+    if open_now is False:
+        reasons.append('place is currently closed')
         return FeasibleMemory(
             memory=memory,
             status='no',
             travel_minutes=travel_minutes,
-            distance_meters=route.distance_meters,
+            distance_meters=distance_meters,
             open_now=False,
-            reasons=['place is currently closed'],
+            reasons=reasons,
         )
 
     if travel_minutes is None:
-        reasons.append('travel time unavailable')
+        if not route_failed:
+            reasons.append('travel time unavailable')
     elif travel_minutes * 2 + visit_minutes > available_minutes:
         reasons.append('round trip plus visit exceeds the time budget')
         return FeasibleMemory(
             memory=memory,
             status='no',
             travel_minutes=travel_minutes,
-            distance_meters=route.distance_meters,
-            open_now=place_status.open_now,
+            distance_meters=distance_meters,
+            open_now=open_now,
             reasons=reasons,
         )
     else:
         reasons.append('fits the current time budget')
 
-    if place_status.open_now is None:
+    if open_now is None and not status_failed:
         reasons.append('live opening status unavailable')
 
-    final_status = 'yes' if travel_minutes is not None and place_status.open_now is True else 'uncertain'
+    final_status = 'yes' if travel_minutes is not None and open_now is True else 'uncertain'
     return FeasibleMemory(
         memory=memory,
         status=final_status,
         travel_minutes=travel_minutes,
-        distance_meters=route.distance_meters,
-        open_now=place_status.open_now,
+        distance_meters=distance_meters,
+        open_now=open_now,
         reasons=reasons,
     )
