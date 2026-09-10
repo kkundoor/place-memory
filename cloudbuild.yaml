@@ -4,7 +4,7 @@ steps:
     entrypoint: bash
     args:
       - -c
-      - pip install -r requirements.txt && PYTHONPATH=. pytest -q
+      - pip install -r requirements.txt && pytest -q
 
   - name: gcr.io/cloud-builders/docker
     args:
