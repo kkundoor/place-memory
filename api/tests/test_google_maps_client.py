@@ -88,3 +88,46 @@ async def test_maps_http_errors_propagate_to_feasibility_boundary():
 
     with pytest.raises(httpx.HTTPStatusError):
         await client.get_status('place-1')
+
+
+@pytest.mark.asyncio
+async def test_search_places_skips_candidates_without_coordinates():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            'places': [
+                {'id': 'missing-location', 'displayName': {'text': 'No Coordinates'}},
+                {
+                    'id': 'valid',
+                    'displayName': {'text': 'Valid Place'},
+                    'location': {'latitude': 40.9, 'longitude': -72.3},
+                },
+            ]
+        })
+
+    client = GoogleMapsClient('secret-key', transport=httpx.MockTransport(handler))
+    places = await client.search_places(PlaceHint(name='Valid Place'))
+
+    assert [place.place_id for place in places] == ['valid']
+
+
+@pytest.mark.asyncio
+async def test_status_keeps_unknown_hours_uncertain():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})
+
+    client = GoogleMapsClient('secret-key', transport=httpx.MockTransport(handler))
+    status = await client.get_status('place-1')
+
+    assert status.open_now is None
+
+
+@pytest.mark.asyncio
+async def test_route_without_candidate_returns_unknown_travel_time():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={'routes': []})
+
+    client = GoogleMapsClient('secret-key', transport=httpx.MockTransport(handler))
+    route = await client.route(Origin(latitude=40.95, longitude=-72.2), 'place-1')
+
+    assert route.duration_seconds is None
+    assert route.distance_meters is None
