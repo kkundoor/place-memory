@@ -262,3 +262,23 @@ def test_delete_memory_removes_saved_data(client):
     assert response.status_code == 204
     assert all(item['id'] != memory_id for item in client.get('/api/memories').json())
     assert client.delete(f'/api/memories/{memory_id}').status_code == 404
+
+
+def test_image_ingest_rejects_unsupported_media_before_vertex(client):
+    response = client.post(
+        '/api/memories/ingest-image',
+        files={'image': ('save.gif', b'GIF89a', 'image/gif')},
+    )
+
+    assert response.status_code == 415
+    assert response.json()['detail'] == 'jpeg, png, or webp required'
+
+
+def test_image_ingest_rejects_oversize_upload_before_vertex(client):
+    response = client.post(
+        '/api/memories/ingest-image',
+        files={'image': ('save.png', b'x' * (8 * 1024 * 1024 + 1), 'image/png')},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['detail'] == 'image must be under 8 MB'
