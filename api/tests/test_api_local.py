@@ -233,3 +233,21 @@ def test_request_metadata_adds_trace_id_without_echoing_query(client, caplog):
     assert 'request_id=test-request' in log_text
     assert 'path=/api/memories' in log_text
     assert 'private-trip-note' not in log_text
+
+
+def test_confirm_rejects_invalid_coordinates(client):
+    create = client.post('/api/memories', json={
+        'source_text': 'saved place',
+        'hint': {'name': 'Saved Place'},
+    })
+    memory_id = create.json()['id']
+
+    response = client.post(f'/api/memories/{memory_id}/confirm', json={
+        'place_id': 'place-1',
+        'name': 'Saved Place',
+        'latitude': 120,
+        'longitude': -72,
+        'confidence': 0.9,
+    })
+
+    assert response.status_code == 422

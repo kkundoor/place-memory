@@ -26,13 +26,13 @@ class PlaceHint(BaseModel):
 
 
 class PlaceCandidate(BaseModel):
-    place_id: str
-    name: str
-    formatted_address: str | None = None
-    latitude: float
-    longitude: float
-    primary_type: str | None = None
-    types: list[str] = Field(default_factory=list)
+    place_id: str = Field(min_length=1, max_length=300)
+    name: str = Field(min_length=1, max_length=300)
+    formatted_address: str | None = Field(default=None, max_length=500)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    primary_type: str | None = Field(default=None, max_length=150)
+    types: list[str] = Field(default_factory=list, max_length=50)
     confidence: float = Field(ge=0, le=1)
     confidence_reasons: list[str] = Field(default_factory=list)
 
