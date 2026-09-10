@@ -21,7 +21,7 @@ The LLM is used for interpretation. Place identity, hours, routing, and feasibil
 - React + TypeScript frontend
 - Python + FastAPI API
 - Google Places / Routes for place grounding and travel time
-- Vertex AI for multimodal extraction and query parsing
+- Vertex AI for multimodal extraction; lexical retrieval in the current v1
 - SQLite locally; Cloud SQL Postgres + pgvector planned for deployment
 - Cloud Run + Terraform + Cloud Build planned for GCP deployment
 
@@ -48,7 +48,7 @@ The API runs without Google credentials in local stub mode. Real place resolutio
 
 ## status
 
-The offline vertical slice is working end to end: ingest, review, persistence, retrieval, and deterministic feasibility all run without cloud credentials. Live Places, Routes, and Vertex integration is the next checkpoint. See `docs/field-test-2026-09-07.md` for the original real-world test plan.
+The offline vertical slice is working end to end: ingest, review, persistence, retrieval, deletion, and deterministic feasibility all run without cloud credentials. Live Places, Routes, and Vertex integration is the next checkpoint. The original 2026-09-07 field test was postponed while travel and cloud setup were still in progress; its test plan is preserved in `docs/field-test-2026-09-07.md`.
 
 ## engineering notes
 

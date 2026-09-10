@@ -1,5 +1,7 @@
 # field test - 2026-09-07
 
+> status: postponed. retained as the original field-test plan; no results are claimed from this date.
+
 ## goal
 
 Test whether saved-place memory is useful in a real day out, not whether the UI looks finished.

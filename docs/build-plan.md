@@ -106,3 +106,17 @@ Offline hardening completed before live cloud integration:
 - SQLite migration keeps pre-candidate local databases usable
 
 Next critical path remains unchanged: configure GCP, run real screenshots through Vertex + Places, then validate live hours/routes from a real location.
+
+
+## checkpoint - 2026-09-10
+
+Additional offline work before live GCP integration:
+
+- candidate ids, names, and coordinates now have bounded validation
+- saved memories can be deleted through the API and UI
+- image upload media type and size boundaries are covered by API tests
+- pytest path setup is repository-local, so CI and local test commands match
+- Maps client contract tests now cover missing coordinates, unknown hours, and no-route responses
+- frontend origin is configurable for later deployment without widening CORS
+
+The project is intentionally not adding semantic retrieval or more ingestion sources yet. The next information-bearing step is still a real Vertex + Places + Routes run.
