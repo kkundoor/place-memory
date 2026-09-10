@@ -14,6 +14,11 @@ export async function listMemories(): Promise<Memory[]> {
   return response.json();
 }
 
+export async function deleteMemory(memoryId: string): Promise<void> {
+  const response = await fetch(`${base}/api/memories/${memoryId}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error('could not delete memory');
+}
+
 export async function ingestMemory(sourceText: string, sourceUrl: string): Promise<IngestResponse> {
   const response = await fetch(`${base}/api/memories/ingest`, {
     method: 'POST',

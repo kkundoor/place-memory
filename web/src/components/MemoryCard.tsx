@@ -3,9 +3,11 @@ import type { Memory, PlaceCandidate } from '../types';
 export function MemoryCard({
   memory,
   onConfirm,
+  onDelete,
 }: {
   memory: Memory;
   onConfirm: (memory: Memory, candidate: PlaceCandidate) => void;
+  onDelete: (memory: Memory) => void;
 }) {
   const candidates = memory.candidates.length ? memory.candidates : memory.place ? [memory.place] : [];
 
@@ -35,6 +37,7 @@ export function MemoryCard({
           ))}
         </div>
       )}
+      <button className="delete" onClick={() => onDelete(memory)}>remove</button>
     </article>
   );
 }

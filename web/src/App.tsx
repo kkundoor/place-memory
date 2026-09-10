@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 
 import { MemoryCard } from './components/MemoryCard';
-import { confirmMemory, getFeasible, getMap, ingestImage, ingestMemory, listMemories } from './lib/api';
+import { confirmMemory, deleteMemory, getFeasible, getMap, ingestImage, ingestMemory, listMemories } from './lib/api';
 import type { FeasibleMemory, Memory, PlaceCandidate } from './types';
 import './styles.css';
 
@@ -53,6 +53,19 @@ export default function App() {
       await refresh();
     } catch {
       setMessage('could not confirm place');
+    }
+  }
+
+  async function remove(memory: Memory) {
+    if (!window.confirm(`remove ${memory.place?.name || memory.hint?.name || 'this save'}?`)) return;
+    try {
+      await deleteMemory(memory.id);
+      setResults((current) => current.filter((result) => result.memory.id !== memory.id));
+      setMapImage('');
+      setMessage('save removed');
+      await refresh();
+    } catch {
+      setMessage('could not remove save');
     }
   }
 
@@ -148,7 +161,7 @@ export default function App() {
         </div>
         <div className="grid">
           {memories.map((memory) => (
-            <MemoryCard key={memory.id} memory={memory} onConfirm={confirm} />
+            <MemoryCard key={memory.id} memory={memory} onConfirm={confirm} onDelete={remove} />
           ))}
         </div>
       </section>
