@@ -251,3 +251,14 @@ def test_confirm_rejects_invalid_coordinates(client):
     })
 
     assert response.status_code == 422
+
+
+def test_delete_memory_removes_saved_data(client):
+    create = client.post('/api/memories', json={'source_text': 'temporary save'})
+    memory_id = create.json()['id']
+
+    response = client.delete(f'/api/memories/{memory_id}')
+
+    assert response.status_code == 204
+    assert all(item['id'] != memory_id for item in client.get('/api/memories').json())
+    assert client.delete(f'/api/memories/{memory_id}').status_code == 404

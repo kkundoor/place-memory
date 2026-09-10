@@ -108,3 +108,13 @@ def test_store_migrates_pre_candidate_schema(tmp_path):
 
     assert 'candidates_json' in columns
     assert store.get(memory.id).candidates == []
+
+
+def test_delete_memory_is_persistent(tmp_path):
+    path = tmp_path / 'delete.db'
+    store = MemoryStore(str(path))
+    memory = store.create(MemoryCreate(source_text='remove me'))
+
+    assert store.delete(memory.id) is True
+    assert MemoryStore(str(path)).get(memory.id) is None
+    assert store.delete(memory.id) is False

@@ -65,6 +65,11 @@ class MemoryStore:
             row = conn.execute('select * from memories where id = ?', (memory_id,)).fetchone()
         return self._from_row(row) if row else None
 
+    def delete(self, memory_id: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute('delete from memories where id = ?', (memory_id,))
+        return cursor.rowcount > 0
+
     def update_resolution(
         self,
         memory_id: str,

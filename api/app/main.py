@@ -3,7 +3,7 @@ import logging
 import time
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.clients.gemini import GeminiExtractor
@@ -78,6 +78,13 @@ def create_memory(data: MemoryCreate) -> Memory:
 def list_memories(q: str = '') -> list[Memory]:
     memories = store.list()
     return search_memories(memories, q) if q else memories
+
+
+@app.delete('/api/memories/{memory_id}', status_code=204)
+def delete_memory(memory_id: str) -> Response:
+    if not store.delete(memory_id):
+        raise HTTPException(status_code=404, detail='memory not found')
+    return Response(status_code=204)
 
 
 @app.post('/api/memories/ingest')
