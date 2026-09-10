@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     google_cloud_project: str = ''
     google_cloud_location: str = 'us-central1'
     vertex_model: str = 'gemini-2.5-flash'
+    web_origin: str = 'http://localhost:5173'
 
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 
