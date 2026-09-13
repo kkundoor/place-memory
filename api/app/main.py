@@ -65,7 +65,7 @@ def health() -> dict:
     return {
         'status': 'ok',
         'maps_enabled': maps.enabled,
-        'vertex_enabled': extractor.enabled,
+        'gemini_enabled': extractor.enabled,
     }
 
 

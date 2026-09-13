@@ -6,13 +6,12 @@ from app.models import PlaceHint
 
 class GeminiExtractor:
     def __init__(self, settings: Settings):
-        self.project = settings.google_cloud_project
-        self.location = settings.google_cloud_location
-        self.model = settings.vertex_model
+        self.api_key = settings.gemini_api_key
+        self.model = settings.gemini_model
 
     @property
     def enabled(self) -> bool:
-        return bool(self.project)
+        return bool(self.api_key)
 
     async def extract_text(self, text: str) -> PlaceHint:
         if not self.enabled:
@@ -21,7 +20,7 @@ class GeminiExtractor:
 
     async def extract_image(self, data: bytes, mime_type: str, source_url: str | None = None) -> PlaceHint:
         if not self.enabled:
-            raise RuntimeError('vertex ai is not configured')
+            raise RuntimeError('gemini api is not configured')
 
         from google.genai import types
 
@@ -38,12 +37,7 @@ class GeminiExtractor:
         from google import genai
         from google.genai import types
 
-        client = genai.Client(
-            enterprise=True,
-            project=self.project,
-            location=self.location,
-            http_options=types.HttpOptions(api_version='v1'),
-        )
+        client = genai.Client(api_key=self.api_key)
         try:
             response = client.models.generate_content(
                 model=self.model,
