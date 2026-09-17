@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     nominatim_base_url: str = 'https://nominatim.openstreetmap.org'
     nominatim_user_agent: str = 'place-memory/0.1 (+https://github.com/kkundoor/place-memory)'
     web_origin: str = 'http://localhost:5173'
+    static_dir: str = ''
 
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 

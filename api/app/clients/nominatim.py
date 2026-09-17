@@ -8,22 +8,24 @@ from app.models import PlaceHint
 
 
 class NominatimClient:
+    """Rate-limited OSM geocoder used as a no-key fallback, not a POI authority."""
+
     def __init__(
         self,
         base_url: str,
         user_agent: str,
         timeout: float = 8.0,
-        min_interval_seconds: float = 1.0,
         transport: httpx.AsyncBaseTransport | None = None,
+        min_interval_seconds: float = 1.0,
     ):
         self.base_url = base_url.rstrip('/')
-        self.user_agent = user_agent
+        self.user_agent = user_agent.strip()
         self.timeout = timeout
-        self.min_interval_seconds = min_interval_seconds
         self.transport = transport
-        self._cache: dict[str, list[RawPlace]] = {}
-        self._request_lock = asyncio.Lock()
+        self.min_interval_seconds = min_interval_seconds
+        self._lock = asyncio.Lock()
         self._last_request_at = 0.0
+        self._cache: dict[str, list[RawPlace]] = {}
 
     @property
     def enabled(self) -> bool:
@@ -33,108 +35,76 @@ class NominatimClient:
         if not self.enabled:
             return []
 
-        query = ', '.join(filter(None, [
-            hint.name,
-            hint.address_hint,
-            hint.city_hint,
-        ]))
-
+        query = ', '.join(filter(None, [hint.name, hint.address_hint, hint.city_hint]))
         cached = self._cache.get(query)
         if cached is not None:
             return list(cached)
 
-        params = {
-            'q': query,
-            'format': 'jsonv2',
-            'addressdetails': 1,
-            'namedetails': 1,
-            'limit': 5,
-        }
-        headers = {
-            'User-Agent': self.user_agent,
-        }
+        async with self._lock:
+            cached = self._cache.get(query)
+            if cached is not None:
+                return list(cached)
 
-        async with self._request_lock:
             elapsed = time.monotonic() - self._last_request_at
-            wait_seconds = self.min_interval_seconds - elapsed
-            if wait_seconds > 0:
-                await asyncio.sleep(wait_seconds)
+            if elapsed < self.min_interval_seconds:
+                await asyncio.sleep(self.min_interval_seconds - elapsed)
 
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
-                transport=self.transport,
-            ) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
                 response = await client.get(
                     f'{self.base_url}/search',
-                    params=params,
-                    headers=headers,
+                    params={
+                        'q': query,
+                        'format': 'jsonv2',
+                        'addressdetails': 1,
+                        'namedetails': 1,
+                        'limit': 5,
+                    },
+                    headers={'User-Agent': self.user_agent},
                 )
+                self._last_request_at = time.monotonic()
                 response.raise_for_status()
                 data = response.json()
 
-            self._last_request_at = time.monotonic()
-
-        places = [
-            place
-            for item in data
-            if (place := self._parse_place(item)) is not None
-        ]
-        self._cache[query] = places
-        return list(places)
+            places = [place for item in data if (place := self._parse(item)) is not None]
+            self._cache[query] = places
+            return list(places)
 
     @staticmethod
-    def _parse_place(item: dict) -> RawPlace | None:
-        if not item.get('lat') or not item.get('lon'):
+    def _parse(item: dict) -> RawPlace | None:
+        try:
+            latitude = float(item['lat'])
+            longitude = float(item['lon'])
+        except (KeyError, TypeError, ValueError):
             return None
 
-        name = NominatimClient._place_name(item)
+        osm_type = str(item.get('osm_type') or 'unknown')
+        osm_id = str(item.get('osm_id') or '')
+        if not osm_id:
+            return None
+
+        namedetails = item.get('namedetails') or {}
+        address = item.get('address') or {}
+        name = (
+            namedetails.get('name')
+            or item.get('name')
+            or address.get('amenity')
+            or address.get('shop')
+            or str(item.get('display_name') or '').split(',')[0]
+        )
         if not name:
             return None
 
         category = item.get('category')
-        place_type = item.get('type')
-        types = list(dict.fromkeys(
-            value
-            for value in [category, place_type]
-            if value
-        ))
-
-        osm_type = item.get('osm_type')
-        osm_id = item.get('osm_id')
-        if osm_type and osm_id:
-            place_id = f'osm:{osm_type}:{osm_id}'
-        else:
-            place_id = f'nominatim:{item["place_id"]}'
-
+        item_type = item.get('type')
+        provider_place_id = f'{osm_type}:{osm_id}'
         return RawPlace(
-            place_id=place_id,
-            name=name,
+            place_id=f'osm:{provider_place_id}',
+            name=str(name),
             formatted_address=item.get('display_name'),
-            latitude=float(item['lat']),
-            longitude=float(item['lon']),
-            primary_type=place_type,
-            types=types,
+            latitude=latitude,
+            longitude=longitude,
+            primary_type=str(item_type) if item_type else None,
+            types=[str(value) for value in [category, item_type] if value],
+            provider='nominatim',
+            provider_place_id=provider_place_id,
         )
-
-    @staticmethod
-    def _place_name(item: dict) -> str:
-        names = item.get('namedetails') or {}
-        if names.get('name'):
-            return str(names['name'])
-
-        address = item.get('address') or {}
-        for key in (
-            'shop',
-            'amenity',
-            'tourism',
-            'leisure',
-            'office',
-            'craft',
-            'building',
-            'place',
-        ):
-            if address.get(key):
-                return str(address[key])
-
-        display_name = str(item.get('display_name') or '')
-        return display_name.split(',')[0].strip()

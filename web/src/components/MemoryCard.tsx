@@ -20,7 +20,9 @@ export function MemoryCard({
       <h3>{memory.place?.name || memory.hint?.name || memory.source_text}</h3>
       {memory.place?.formatted_address && <p>{memory.place.formatted_address}</p>}
       {memory.place && (
-        <p className="muted">confidence {Math.round(memory.place.confidence * 100)}%</p>
+        <p className="muted">
+          confidence {Math.round(memory.place.confidence * 100)}% · source {memory.place.provider}
+        </p>
       )}
       {memory.resolution_status === 'needs_review' && candidates.length > 0 && (
         <div className="candidate-list">

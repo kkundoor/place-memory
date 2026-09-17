@@ -6,72 +6,62 @@ from app.models import PlaceHint
 
 
 @pytest.mark.asyncio
-async def test_search_places_identifies_app_and_parses_candidates():
+async def test_nominatim_builds_query_sets_user_agent_and_normalizes_results():
     seen = {}
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen['url'] = request.url
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen['query'] = request.url.params['q']
         seen['user_agent'] = request.headers['user-agent']
-        return httpx.Response(200, json=[
-            {
-                'place_id': 123,
-                'osm_type': 'node',
-                'osm_id': 456,
-                'lat': '40.972',
-                'lon': '-72.181',
-                'display_name': 'Carissa’s Bakery, East Hampton, New York, USA',
-                'category': 'shop',
-                'type': 'bakery',
-                'namedetails': {'name': 'Carissa’s Bakery'},
-                'address': {
-                    'shop': 'Carissa’s Bakery',
-                    'town': 'East Hampton',
-                },
-            }
-        ])
+        return httpx.Response(200, json=[{
+            'osm_type': 'node',
+            'osm_id': 123,
+            'lat': '40.963',
+            'lon': '-72.184',
+            'display_name': 'Example Bakery, East Hampton, New York',
+            'namedetails': {'name': 'Example Bakery'},
+            'category': 'shop',
+            'type': 'bakery',
+        }])
 
     client = NominatimClient(
-        'https://nominatim.example',
-        'place-memory-test/0.1',
-        min_interval_seconds=0,
+        'https://nominatim.test',
+        'place-memory-tests/1.0',
         transport=httpx.MockTransport(handler),
+        min_interval_seconds=0,
     )
 
-    places = await client.search_places(PlaceHint(
-        name='Carissa’s Bakery',
+    results = await client.search_places(PlaceHint(
+        name='Example Bakery',
         city_hint='East Hampton',
         category_hint='bakery',
     ))
 
-    assert seen['url'].params['q'] == 'Carissa’s Bakery, East Hampton'
-    assert seen['url'].params['limit'] == '5'
-    assert seen['user_agent'] == 'place-memory-test/0.1'
-    assert places[0].place_id == 'osm:node:456'
-    assert places[0].name == 'Carissa’s Bakery'
-    assert places[0].primary_type == 'bakery'
-    assert places[0].types == ['shop', 'bakery']
-    assert places[0].latitude == 40.972
+    assert seen['query'] == 'Example Bakery, East Hampton'
+    assert seen['user_agent'] == 'place-memory-tests/1.0'
+    assert results[0].place_id == 'osm:node:123'
+    assert results[0].provider == 'nominatim'
+    assert results[0].provider_place_id == 'node:123'
+    assert results[0].name == 'Example Bakery'
 
 
 @pytest.mark.asyncio
-async def test_search_places_caches_duplicate_query():
-    request_count = 0
+async def test_nominatim_caches_duplicate_queries():
+    calls = 0
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal request_count
-        request_count += 1
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
         return httpx.Response(200, json=[])
 
     client = NominatimClient(
-        'https://nominatim.example',
-        'place-memory-test/0.1',
-        min_interval_seconds=0,
+        'https://nominatim.test',
+        'place-memory-tests/1.0',
         transport=httpx.MockTransport(handler),
+        min_interval_seconds=0,
     )
-
-    hint = PlaceHint(name='Saved Place')
+    hint = PlaceHint(name='Same Place', city_hint='Detroit')
 
     await client.search_places(hint)
     await client.search_places(hint)
 
-    assert request_count == 1
+    assert calls == 1

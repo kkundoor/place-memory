@@ -8,12 +8,15 @@ export type PlaceHint = {
 
 export type PlaceCandidate = {
   place_id: string;
+  provider: string;
+  provider_place_id?: string | null;
   name: string;
   formatted_address?: string | null;
   latitude: number;
   longitude: number;
   primary_type?: string | null;
   confidence: number;
+  confidence_reasons?: string[];
 };
 
 export type Memory = {

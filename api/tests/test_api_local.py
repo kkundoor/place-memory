@@ -271,7 +271,7 @@ def test_delete_memory_removes_saved_data(client):
     assert client.delete(f'/api/memories/{memory_id}').status_code == 404
 
 
-def test_image_ingest_rejects_unsupported_media_before_vertex(client):
+def test_image_ingest_rejects_unsupported_media_before_model(client):
     response = client.post(
         '/api/memories/ingest-image',
         files={'image': ('save.gif', b'GIF89a', 'image/gif')},
@@ -281,7 +281,7 @@ def test_image_ingest_rejects_unsupported_media_before_vertex(client):
     assert response.json()['detail'] == 'jpeg, png, or webp required'
 
 
-def test_image_ingest_rejects_oversize_upload_before_vertex(client):
+def test_image_ingest_rejects_oversize_upload_before_model(client):
     response = client.post(
         '/api/memories/ingest-image',
         files={'image': ('save.png', b'x' * (8 * 1024 * 1024 + 1), 'image/png')},
@@ -289,3 +289,159 @@ def test_image_ingest_rejects_oversize_upload_before_vertex(client):
 
     assert response.status_code == 413
     assert response.json()['detail'] == 'image must be under 8 MB'
+
+
+def test_resolution_explanation_exposes_policy_and_candidate_reasons(client, monkeypatch):
+    from app.clients.google_maps import RawPlace
+
+    class Search:
+        enabled = True
+
+        async def search_places(self, hint):
+            return [
+                RawPlace(
+                    place_id='known-place',
+                    name='Carissa’s Bakery',
+                    formatted_address='East Hampton, NY',
+                    latitude=40.96,
+                    longitude=-72.18,
+                    primary_type='bakery',
+                    types=['bakery'],
+                    provider='fixture',
+                    provider_place_id='known-place',
+                )
+            ]
+
+    monkeypatch.setattr(main, 'place_search', Search())
+    ingest = client.post('/api/memories/ingest', json={
+        'source_text': 'Carissa’s Bakery in East Hampton',
+        'hint': {
+            'name': 'Carissa’s Bakery',
+            'city_hint': 'East Hampton',
+            'category_hint': 'bakery',
+        },
+    }).json()
+
+    response = client.get(f"/api/memories/{ingest['memory']['id']}/resolution")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['policy']['resolve_threshold'] == 0.76
+    assert body['status'] == 'resolved'
+    assert body['candidates'][0]['provider'] == 'fixture'
+    assert any(reason.startswith('name=') for reason in body['candidates'][0]['confidence_reasons'])
+
+
+def test_ingest_keeps_memory_unresolved_when_place_provider_fails(client, monkeypatch):
+    import httpx
+
+    class FailingSearch:
+        enabled = True
+
+        async def search_places(self, hint):
+            raise httpx.ConnectError('provider offline')
+
+    monkeypatch.setattr(main, 'place_search', FailingSearch())
+    response = client.post('/api/memories/ingest', json={
+        'source_text': 'Detroit Institute of Arts',
+        'hint': {'name': 'Detroit Institute of Arts', 'city_hint': 'Detroit'},
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['memory']['resolution_status'] == 'unresolved'
+    assert body['candidates'] == []
+    assert body['warning'] == 'place search is temporarily unavailable'
+
+
+def test_text_ingest_runs_extraction_resolution_and_persistence(client, monkeypatch):
+    from app.clients.google_maps import RawPlace
+    from app.models import PlaceHint
+
+    class Extractor:
+        async def extract_text(self, text):
+            assert 'Detroit Institute of Arts' in text
+            return PlaceHint(
+                name='Detroit Institute of Arts',
+                city_hint='Detroit',
+                category_hint='museum',
+                evidence='Detroit Institute of Arts',
+            )
+
+    class Search:
+        enabled = True
+
+        async def search_places(self, hint):
+            return [RawPlace(
+                place_id='dia',
+                name='Detroit Institute of Arts',
+                formatted_address='5200 Woodward Ave, Detroit, MI',
+                latitude=42.3594,
+                longitude=-83.0646,
+                primary_type='museum',
+                types=['museum'],
+                provider='fixture',
+                provider_place_id='dia',
+            )]
+
+    monkeypatch.setattr(main, 'extractor', Extractor())
+    monkeypatch.setattr(main, 'place_search', Search())
+
+    response = client.post('/api/memories/ingest', json={
+        'source_type': 'note',
+        'source_text': 'saw Detroit Institute of Arts in a weekend guide',
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['memory']['resolution_status'] == 'resolved'
+    assert body['memory']['hint']['name'] == 'Detroit Institute of Arts'
+    assert body['memory']['place']['provider'] == 'fixture'
+    assert client.get('/api/memories').json()[0]['place']['place_id'] == 'dia'
+
+
+def test_image_ingest_runs_extraction_resolution_and_persistence(client, monkeypatch):
+    from app.clients.google_maps import RawPlace
+    from app.models import PlaceHint
+
+    class Extractor:
+        async def extract_image(self, data, mime_type, source_url=None):
+            assert data == b'fake-png-bytes'
+            assert mime_type == 'image/png'
+            return PlaceHint(
+                name='Detroit Institute of Arts',
+                city_hint='Detroit',
+                category_hint='museum',
+                evidence='museum name visible in screenshot',
+            )
+
+    class Search:
+        enabled = True
+
+        async def search_places(self, hint):
+            return [RawPlace(
+                place_id='dia',
+                name='Detroit Institute of Arts',
+                formatted_address='5200 Woodward Ave, Detroit, MI',
+                latitude=42.3594,
+                longitude=-83.0646,
+                primary_type='museum',
+                types=['museum'],
+                provider='fixture',
+                provider_place_id='dia',
+            )]
+
+    monkeypatch.setattr(main, 'extractor', Extractor())
+    monkeypatch.setattr(main, 'place_search', Search())
+
+    response = client.post(
+        '/api/memories/ingest-image',
+        files={'image': ('save.png', b'fake-png-bytes', 'image/png')},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['memory']['source_type'] == 'screenshot'
+    assert body['memory']['resolution_status'] == 'resolved'
+    assert body['memory']['source_text'] == 'museum name visible in screenshot'
+    assert body['memory']['place']['provider_place_id'] == 'dia'

@@ -1,6 +1,6 @@
 import type { FeasibleMemory, Memory, PlaceCandidate } from '../types';
 
-const base = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const base = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000');
 
 type IngestResponse = {
   memory: Memory;

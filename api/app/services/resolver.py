@@ -1,6 +1,7 @@
+from typing import Protocol
+
 from rapidfuzz.fuzz import ratio
 
-from typing import Protocol
 from app.clients.google_maps import RawPlace
 from app.models import PlaceCandidate, PlaceHint, ResolutionStatus
 
@@ -8,9 +9,10 @@ from app.models import PlaceCandidate, PlaceHint, ResolutionStatus
 RESOLVE_THRESHOLD = 0.76
 AMBIGUITY_GAP = 0.10
 
+
 class PlaceSearchClient(Protocol):
-    async def search_places(self, hint: PlaceHint) -> list[RawPlace]:
-        ...
+    async def search_places(self, hint: PlaceHint) -> list[RawPlace]: ...
+
 
 def _norm(value: str | None) -> str:
     return ' '.join((value or '').lower().split())
@@ -19,11 +21,11 @@ def _norm(value: str | None) -> str:
 def score_candidate(hint: PlaceHint, place: RawPlace) -> PlaceCandidate:
     name_score = ratio(_norm(hint.name), _norm(place.name)) / 100
 
-    location_text = _norm(' '.join(filter(None, [place.formatted_address])))
+    location_text = _norm(place.formatted_address)
     location_hints = ' '.join(filter(None, [hint.city_hint, hint.address_hint]))
     location_score = ratio(_norm(location_hints), location_text) / 100 if location_hints else 0.5
 
-    candidate_types = {_norm(x) for x in place.types}
+    candidate_types = {_norm(item) for item in place.types}
     if place.primary_type:
         candidate_types.add(_norm(place.primary_type))
     category = _norm(hint.category_hint)
@@ -40,6 +42,8 @@ def score_candidate(hint: PlaceHint, place: RawPlace) -> PlaceCandidate:
 
     return PlaceCandidate(
         place_id=place.place_id,
+        provider=place.provider,
+        provider_place_id=place.provider_place_id or place.place_id,
         name=place.name,
         formatted_address=place.formatted_address,
         latitude=place.latitude,
@@ -62,6 +66,35 @@ def decide_resolution(
     if top.confidence < RESOLVE_THRESHOLD or gap < AMBIGUITY_GAP:
         return ResolutionStatus.needs_review, top
     return ResolutionStatus.resolved, top
+
+
+def explain_resolution(
+    status: ResolutionStatus,
+    candidates: list[PlaceCandidate],
+) -> dict:
+    top = candidates[0] if candidates else None
+    gap = (
+        top.confidence - candidates[1].confidence
+        if top and len(candidates) > 1
+        else (1.0 if top else None)
+    )
+    return {
+        'status': status.value,
+        'policy': {
+            'resolve_threshold': RESOLVE_THRESHOLD,
+            'ambiguity_gap': AMBIGUITY_GAP,
+        },
+        'top_confidence': top.confidence if top else None,
+        'top_gap': round(gap, 4) if gap is not None else None,
+        'decision': (
+            'no candidates returned by the place-search provider'
+            if not top
+            else 'auto-resolved: confidence and separation both passed the policy'
+            if status == ResolutionStatus.resolved
+            else 'review required: confidence or candidate separation did not pass the policy'
+        ),
+        'candidates': [candidate.model_dump() for candidate in candidates],
+    }
 
 
 async def resolve_hint(

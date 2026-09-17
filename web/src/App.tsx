@@ -165,8 +165,9 @@ export default function App() {
           ))}
         </div>
       </section>
+
       <footer className="attribution">
-        Place data © OpenStreetMap contributors
+        Place-search fallback data © OpenStreetMap contributors. Live provider data may be used when configured.
       </footer>
     </main>
   );

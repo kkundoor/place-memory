@@ -27,6 +27,8 @@ class PlaceHint(BaseModel):
 
 class PlaceCandidate(BaseModel):
     place_id: str = Field(min_length=1, max_length=300)
+    provider: str = Field(default='unknown', min_length=1, max_length=80)
+    provider_place_id: str | None = Field(default=None, max_length=300)
     name: str = Field(min_length=1, max_length=300)
     formatted_address: str | None = Field(default=None, max_length=500)
     latitude: float = Field(ge=-90, le=90)

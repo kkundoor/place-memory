@@ -1,10 +1,14 @@
 import base64
 import logging
 import time
+from pathlib import Path
 from uuid import uuid4
+
+import httpx
 
 from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.clients.gemini import GeminiExtractor
 from app.clients.google_maps import GoogleMapsClient
@@ -21,7 +25,7 @@ from app.models import (
     SourceType,
 )
 from app.services.feasibility import check_memories
-from app.services.resolver import resolve_hint
+from app.services.resolver import explain_resolution, resolve_hint
 from app.services.retrieval import search_memories
 from app.storage.sqlite import MemoryStore
 
@@ -31,14 +35,11 @@ logger = logging.getLogger('place_memory.api')
 settings = get_settings()
 store = MemoryStore(settings.database_path)
 maps = GoogleMapsClient(settings.google_maps_api_key)
-nominatim = NominatimClient(
-    settings.nominatim_base_url,
-    settings.nominatim_user_agent,
-)
+nominatim = NominatimClient(settings.nominatim_base_url, settings.nominatim_user_agent)
 place_search = maps if maps.enabled else nominatim
 extractor = GeminiExtractor(settings)
 
-app = FastAPI(title='place memory api', version='0.1.0')
+app = FastAPI(title='place memory api', version='0.2.0')
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.web_origin],
@@ -70,9 +71,10 @@ async def request_metadata(request, call_next):
 def health() -> dict:
     return {
         'status': 'ok',
+        'place_search_enabled': place_search.enabled,
+        'place_search_provider': 'google' if maps.enabled else 'nominatim',
         'maps_enabled': maps.enabled,
         'gemini_enabled': extractor.enabled,
-        'place_search_enabled': place_search.enabled,
     }
 
 
@@ -102,7 +104,12 @@ async def ingest_memory(data: MemoryCreate) -> dict:
         updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
         return {'memory': updated, 'candidates': [], 'warning': 'place search is not configured'}
 
-    status, selected, candidates = await resolve_hint(hint, place_search)
+    try:
+        status, selected, candidates = await resolve_hint(hint, place_search)
+    except httpx.HTTPError:
+        logger.exception('place_search_failed memory_id=%s', memory.id)
+        updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
+        return {'memory': updated, 'candidates': [], 'warning': 'place search is temporarily unavailable'}
     updated = store.update_resolution(memory.id, hint, selected, status, candidates)
     return {'memory': updated, 'candidates': candidates}
 
@@ -135,7 +142,12 @@ async def ingest_image(
         updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
         return {'memory': updated, 'candidates': [], 'warning': 'place search is not configured'}
 
-    status, selected, candidates = await resolve_hint(hint, place_search)
+    try:
+        status, selected, candidates = await resolve_hint(hint, place_search)
+    except httpx.HTTPError:
+        logger.exception('place_search_failed memory_id=%s', memory.id)
+        updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
+        return {'memory': updated, 'candidates': [], 'warning': 'place search is temporarily unavailable'}
     updated = store.update_resolution(memory.id, hint, selected, status, candidates)
     return {'memory': updated, 'candidates': candidates}
 
@@ -147,11 +159,24 @@ async def resolve_memory(memory_id: str, hint: PlaceHint) -> dict:
     if not place_search.enabled:
         raise HTTPException(status_code=503, detail='place search is not configured')
 
-    status, selected, candidates = await resolve_hint(hint, place_search)
+    try:
+        status, selected, candidates = await resolve_hint(hint, place_search)
+    except httpx.HTTPError as exc:
+        logger.exception('place_search_failed memory_id=%s', memory_id)
+        raise HTTPException(status_code=503, detail='place search is temporarily unavailable') from exc
     memory = store.update_resolution(memory_id, hint, selected, status, candidates)
+    return {'memory': memory, 'candidates': candidates}
+
+
+@app.get('/api/memories/{memory_id}/resolution')
+def resolution_explanation(memory_id: str) -> dict:
+    memory = store.get(memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail='memory not found')
     return {
-        'memory': memory,
-        'candidates': candidates,
+        'memory_id': memory.id,
+        'hint': memory.hint.model_dump() if memory.hint else None,
+        **explain_resolution(memory.resolution_status, memory.candidates),
     }
 
 
@@ -216,3 +241,8 @@ async def map_image(data: FeasibilityRequest) -> dict:
         'image_base64': base64.b64encode(image).decode('ascii'),
         'count': len(coordinates),
     }
+
+
+static_dir = Path(settings.static_dir) if settings.static_dir else None
+if static_dir and static_dir.exists():
+    app.mount('/', StaticFiles(directory=str(static_dir), html=True), name='web')

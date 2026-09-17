@@ -14,6 +14,8 @@ class RawPlace:
     longitude: float
     primary_type: str | None
     types: list[str]
+    provider: str = 'google'
+    provider_place_id: str | None = None
 
 
 @dataclass
@@ -83,6 +85,8 @@ class GoogleMapsClient:
                 longitude=location['longitude'],
                 primary_type=item.get('primaryType'),
                 types=item.get('types', []),
+                provider='google',
+                provider_place_id=item['id'],
             ))
         return results
 

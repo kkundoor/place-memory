@@ -117,8 +117,8 @@ button.delete {
 }
 
 .attribution {
-  margin-top: 32px;
-  padding: 16px 0;
-  font-size: 12px;
-  opacity: 0.65;
+  margin: 40px 0 16px;
+  padding-top: 16px;
+  font-size: 0.78rem;
+  opacity: 0.62;
 }
