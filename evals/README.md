@@ -1,46 +1,46 @@
-# evals
+# evaluation
 
-This project treats evals as part of the product, not a demo afterthought.
+Place Memory treats evaluation as part of the resolver, not as a demo afterthought. A wrong canonical place is more damaging than asking the user for review, so the primary safety metric is **false auto-resolution rate**.
 
-## resolution metrics
+## resolver benchmark
 
-### top-1 place accuracy
+`python evals/run_resolution_eval.py` runs a labeled, deterministic resolver-level benchmark covering exact names, typos, chain ambiguity, address disambiguation, category conflicts, abbreviations, same-name places in different cities, and missing candidates.
 
-How often the highest-ranked candidate is the actual saved place.
+Current fixture-level results:
 
-### false-confident rate
+- 12 labeled cases
+- 75% top-1 accuracy on cases with a labeled target
+- 100% precision among automatic resolutions
+- 83.3% recall on cases intentionally labeled safe to auto-resolve
+- 0% false auto-resolution rate
+- 58.3% review/abstain rate
 
-How often the system marks the wrong place as `resolved` instead of `needs_review` or `unresolved`.
+The script exits non-zero if any false automatic resolution appears, so the safety policy can be used as a CI gate.
 
-This is the highest-cost failure. A miss is annoying; a wrong pin that looks certain breaks trust.
+These are **resolver-level fixture metrics**, not a claim about end-to-end real-world accuracy. The next benchmark layer uses real screenshots and live candidate providers and measures extraction accuracy, provider recall@k, latency, and cost separately.
 
-### review rate
+## why abstention is intentional
 
-How often a person has to confirm the candidate. The target is not zero. Review is the intended safety valve for ambiguity.
+The resolver has three outcomes:
 
-## retrieval metrics
+- `resolved`: confidence and candidate separation pass policy
+- `needs_review`: at least one candidate exists, but evidence is not strong enough for automatic canonicalization
+- `unresolved`: no candidate exists
 
-After semantic retrieval is added:
+The target is not a zero review rate. Review is the safety valve for ambiguous saves, especially chain locations and incomplete social artifacts.
 
-- recall@3 for expected saved places
-- nDCG@5 for ranked relevance
-- structured-filter correctness
+## future system metrics
 
-## feasibility metrics
+For live artifact evaluation:
 
-- open / closed correctness when live hours are available
-- route-duration error against the tool response: 0 by construction
-- policy correctness for time-budget decisions
-- `uncertain` rate when facts are missing
-
-## system metrics
-
+- extraction correctness
+- candidate recall@1 / recall@5
+- automatic-resolution precision and recall
+- false auto-resolution rate
+- review/abstention rate
 - p50 / p95 ingest latency
-- p50 / p95 query latency
-- tool error rate
-- model / tool calls per request
-- cost per ingest and query
+- provider/model error rate
+- model and tool calls per request
+- approximate cost per ingest and query
 
-## field data
-
-Use `field-test-template.csv` during real use. Do not remove failures from the dataset after they are fixed; they become regression cases.
+Failures stay in the dataset after fixes so they become regression cases.

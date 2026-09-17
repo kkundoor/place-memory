@@ -1,0 +1,120 @@
+{
+  "summary": {
+    "cases": 12,
+    "top1_accuracy_on_labeled_cases": 0.75,
+    "auto_resolution_precision": 1.0,
+    "auto_resolution_recall_on_safe_cases": 0.8333,
+    "false_auto_resolution_rate": 0.0,
+    "review_or_abstain_rate": 0.5833
+  },
+  "cases": [
+    {
+      "case": "exact business with city and category",
+      "expected_id": "carissa",
+      "should_auto_resolve": true,
+      "status": "resolved",
+      "top_id": "carissa",
+      "top_confidence": 0.9643,
+      "resolved_id": "carissa"
+    },
+    {
+      "case": "minor typo with strong location",
+      "expected_id": "carissa",
+      "should_auto_resolve": true,
+      "status": "resolved",
+      "top_id": "carissa",
+      "top_confidence": 0.9243,
+      "resolved_id": "carissa"
+    },
+    {
+      "case": "ambiguous same-prefix venues",
+      "expected_id": null,
+      "should_auto_resolve": false,
+      "status": "needs_review",
+      "top_id": "point-bar",
+      "top_confidence": 0.7774,
+      "resolved_id": null
+    },
+    {
+      "case": "chain name without branch evidence",
+      "expected_id": null,
+      "should_auto_resolve": false,
+      "status": "needs_review",
+      "top_id": "sb-1",
+      "top_confidence": 0.8614,
+      "resolved_id": null
+    },
+    {
+      "case": "chain disambiguated by address",
+      "expected_id": "sb-2",
+      "should_auto_resolve": true,
+      "status": "needs_review",
+      "top_id": "sb-2",
+      "top_confidence": 0.8588,
+      "resolved_id": null
+    },
+    {
+      "case": "wrong category should not be blindly trusted",
+      "expected_id": "commons-restaurant",
+      "should_auto_resolve": false,
+      "status": "needs_review",
+      "top_id": "commons-office",
+      "top_confidence": 0.8132,
+      "resolved_id": null
+    },
+    {
+      "case": "no candidates",
+      "expected_id": null,
+      "should_auto_resolve": false,
+      "status": "unresolved",
+      "top_id": null,
+      "top_confidence": null,
+      "resolved_id": null
+    },
+    {
+      "case": "exact museum with full city",
+      "expected_id": "dia",
+      "should_auto_resolve": true,
+      "status": "resolved",
+      "top_id": "dia",
+      "top_confidence": 0.8446,
+      "resolved_id": "dia"
+    },
+    {
+      "case": "abbreviated name supported by city",
+      "expected_id": "dia",
+      "should_auto_resolve": false,
+      "status": "needs_review",
+      "top_id": "dia-shop",
+      "top_confidence": 0.4764,
+      "resolved_id": null
+    },
+    {
+      "case": "same name different cities",
+      "expected_id": "union-detroit",
+      "should_auto_resolve": true,
+      "status": "resolved",
+      "top_id": "union-detroit",
+      "top_confidence": 0.9444,
+      "resolved_id": "union-detroit"
+    },
+    {
+      "case": "category-only ambiguity",
+      "expected_id": null,
+      "should_auto_resolve": false,
+      "status": "needs_review",
+      "top_id": "central-1",
+      "top_confidence": 0.875,
+      "resolved_id": null
+    },
+    {
+      "case": "address beats near-identical name",
+      "expected_id": "savas",
+      "should_auto_resolve": true,
+      "status": "resolved",
+      "top_id": "savas",
+      "top_confidence": 0.8275,
+      "resolved_id": "savas"
+    }
+  ]
+}

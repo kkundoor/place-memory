@@ -18,6 +18,22 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - run: pytest -q
+      - name: resolver safety eval
+        run: python ../evals/run_resolution_eval.py
+
+  mcp:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-mcp.txt
+      - name: import MCP server
+        run: python -c "from app.mcp_server import mcp; print(mcp.name if hasattr(mcp, 'name') else 'place-memory')"
 
   web:
     runs-on: ubuntu-latest
