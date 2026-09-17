@@ -1,12 +1,16 @@
 from rapidfuzz.fuzz import ratio
 
-from app.clients.google_maps import GoogleMapsClient, RawPlace
+from typing import Protocol
+from app.clients.google_maps import RawPlace
 from app.models import PlaceCandidate, PlaceHint, ResolutionStatus
 
 
 RESOLVE_THRESHOLD = 0.76
 AMBIGUITY_GAP = 0.10
 
+class PlaceSearchClient(Protocol):
+    async def search_places(self, hint: PlaceHint) -> list[RawPlace]:
+        ...
 
 def _norm(value: str | None) -> str:
     return ' '.join((value or '').lower().split())
@@ -62,7 +66,7 @@ def decide_resolution(
 
 async def resolve_hint(
     hint: PlaceHint,
-    client: GoogleMapsClient,
+    client: PlaceSearchClient,
 ) -> tuple[ResolutionStatus, PlaceCandidate | None, list[PlaceCandidate]]:
     raw = await client.search_places(hint)
     ranked = sorted(

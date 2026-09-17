@@ -165,6 +165,9 @@ export default function App() {
           ))}
         </div>
       </section>
+      <footer className="attribution">
+        Place data © OpenStreetMap contributors
+      </footer>
     </main>
   );
 }

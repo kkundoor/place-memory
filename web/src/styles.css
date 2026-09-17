@@ -115,3 +115,10 @@ button.delete {
   color: #8a5a53;
   font-size: 12px;
 }
+
+.attribution {
+  margin-top: 32px;
+  padding: 16px 0;
+  font-size: 12px;
+  opacity: 0.65;
+}

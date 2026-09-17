@@ -7,7 +7,14 @@ from app.storage.sqlite import MemoryStore
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
+    class DisabledPlaceSearch:
+        enabled = False
+
+        async def search_places(self, hint):
+            return []
+
     monkeypatch.setattr(main, 'store', MemoryStore(str(tmp_path / 'test.db')))
+    monkeypatch.setattr(main, 'place_search', DisabledPlaceSearch())
     return TestClient(main.app)
 
 
@@ -25,7 +32,7 @@ def test_local_ingest_review_confirm_and_query(client):
     assert response.status_code == 200
     payload = response.json()
     assert payload['memory']['resolution_status'] == 'unresolved'
-    assert payload['warning'] == 'google maps is not configured'
+    assert payload['warning'] == 'place search is not configured'
 
     memory_id = payload['memory']['id']
     confirm = client.post(f'/api/memories/{memory_id}/confirm', json={
@@ -106,7 +113,7 @@ def test_review_candidates_are_persisted(client, monkeypatch):
                 ),
             ]
 
-    monkeypatch.setattr(main, 'maps', ReviewMaps())
+    monkeypatch.setattr(main, 'place_search', ReviewMaps())
     response = client.post('/api/memories/ingest', json={
         'source_type': 'note',
         'source_text': 'The Point in Southampton',
@@ -151,7 +158,7 @@ def test_confirm_uses_stored_candidate_instead_of_client_fields(client, monkeypa
                 ),
             ]
 
-    monkeypatch.setattr(main, 'maps', ReviewMaps())
+    monkeypatch.setattr(main, 'place_search', ReviewMaps())
     ingest = client.post('/api/memories/ingest', json={
         'source_text': 'The Point in Southampton',
         'hint': {'name': 'The Point', 'city_hint': 'Southampton'},
@@ -204,7 +211,7 @@ def test_confirm_rejects_candidate_that_was_not_offered(client, monkeypatch):
                 ),
             ]
 
-    monkeypatch.setattr(main, 'maps', ReviewMaps())
+    monkeypatch.setattr(main, 'place_search', ReviewMaps())
     ingest = client.post('/api/memories/ingest', json={
         'source_text': 'The Point in Southampton',
         'hint': {'name': 'The Point', 'city_hint': 'Southampton'},

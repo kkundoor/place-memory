@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.clients.gemini import GeminiExtractor
 from app.clients.google_maps import GoogleMapsClient
+from app.clients.nominatim import NominatimClient
 from app.config import get_settings
 from app.models import (
     FeasibilityRequest,
@@ -30,6 +31,11 @@ logger = logging.getLogger('place_memory.api')
 settings = get_settings()
 store = MemoryStore(settings.database_path)
 maps = GoogleMapsClient(settings.google_maps_api_key)
+nominatim = NominatimClient(
+    settings.nominatim_base_url,
+    settings.nominatim_user_agent,
+)
+place_search = maps if maps.enabled else nominatim
 extractor = GeminiExtractor(settings)
 
 app = FastAPI(title='place memory api', version='0.1.0')
@@ -66,6 +72,7 @@ def health() -> dict:
         'status': 'ok',
         'maps_enabled': maps.enabled,
         'gemini_enabled': extractor.enabled,
+        'place_search_enabled': place_search.enabled,
     }
 
 
@@ -91,11 +98,11 @@ def delete_memory(memory_id: str) -> Response:
 async def ingest_memory(data: MemoryCreate) -> dict:
     memory = store.create(data)
     hint = data.hint or await extractor.extract_text(data.source_text)
-    if not maps.enabled:
+    if not place_search.enabled:
         updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
-        return {'memory': updated, 'candidates': [], 'warning': 'google maps is not configured'}
+        return {'memory': updated, 'candidates': [], 'warning': 'place search is not configured'}
 
-    status, selected, candidates = await resolve_hint(hint, maps)
+    status, selected, candidates = await resolve_hint(hint, place_search)
     updated = store.update_resolution(memory.id, hint, selected, status, candidates)
     return {'memory': updated, 'candidates': candidates}
 
@@ -124,11 +131,11 @@ async def ingest_image(
         note=note,
         hint=hint,
     ))
-    if not maps.enabled:
+    if not place_search.enabled:
         updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
-        return {'memory': updated, 'candidates': [], 'warning': 'google maps is not configured'}
+        return {'memory': updated, 'candidates': [], 'warning': 'place search is not configured'}
 
-    status, selected, candidates = await resolve_hint(hint, maps)
+    status, selected, candidates = await resolve_hint(hint, place_search)
     updated = store.update_resolution(memory.id, hint, selected, status, candidates)
     return {'memory': updated, 'candidates': candidates}
 
@@ -137,10 +144,10 @@ async def ingest_image(
 async def resolve_memory(memory_id: str, hint: PlaceHint) -> dict:
     if not store.get(memory_id):
         raise HTTPException(status_code=404, detail='memory not found')
-    if not maps.enabled:
-        raise HTTPException(status_code=503, detail='google maps is not configured')
+    if not place_search.enabled:
+        raise HTTPException(status_code=503, detail='place search is not configured')
 
-    status, selected, candidates = await resolve_hint(hint, maps)
+    status, selected, candidates = await resolve_hint(hint, place_search)
     memory = store.update_resolution(memory_id, hint, selected, status, candidates)
     return {
         'memory': memory,

@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     google_maps_api_key: str = ''
     gemini_api_key: str = ''
     gemini_model: str = 'gemini-3.6-flash'
+    nominatim_base_url: str = 'https://nominatim.openstreetmap.org'
+    nominatim_user_agent: str = 'place-memory/0.1 (+https://github.com/kkundoor/place-memory)'
     web_origin: str = 'http://localhost:5173'
 
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
