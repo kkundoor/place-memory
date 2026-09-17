@@ -1,122 +1,74 @@
 # build plan
 
-## critical path to first field test
+## shareable checkpoint
 
-```text
-repo + contracts
-      |
-      v
-save input --> extract hint --> resolve place --> confidence gate --> persist
-                                                          |
-                                                          v
-browser location --> retrieve saved places --> live hours + route --> feasibility
-                                                          |
-                                                          v
-                                                     field test
-```
+The first-share bar is intentionally narrower than the eventual research/depth target.
 
-Anything that does not improve this path is below the line until the first test.
+### required before sharing
 
-## day 1 - 2026-09-06
+- real text/screenshot ingestion boundary
+- Gemini Developer API extraction path
+- provider-neutral candidate search
+- deterministic confidence + ambiguity policy
+- review / abstention behavior
+- persisted candidates + provenance
+- explanation endpoint
+- resolver benchmark used as CI safety gate
+- optional MCP adapter over deterministic capabilities
+- reproducible local startup
+- backend tests + frontend production build in CI
+- README that states current limitations honestly
 
-### done
+### already implemented in this checkpoint
 
-- repository structure + architecture notes
-- FastAPI service + local storage boundary
-- Google Places resolution client
-- confidence-scored resolver with ambiguity gate
-- live hours + route-based feasibility rules
-- React first-pass interface
-- browser geolocation
-- screenshot ingestion boundary for Vertex AI
-- manual review/confirm path
-- unit tests for resolver, retrieval, and feasibility
-- initial Terraform API enablement
-- field-test plan
+- API + React product surface
+- screenshot type/size validation
+- local persistence + candidate migration
+- request tracing without query text
+- bounded feasibility concurrency
+- provider-client contract tests
+- no-key Nominatim fallback with rate limiting/cache
+- provider-neutral resolver boundary
+- provenance fields
+- resolution explanation endpoint
+- deterministic 12-case resolver benchmark
+- MCP adapter
+- Docker Compose local runtime
 
-### still needed before field test
+## next depth milestone
 
-1. configure one Google Cloud project
-2. enable Vertex / Places / Routes APIs
-3. set local credentials + maps key
-4. run one real screenshot through extraction + resolution
-5. run one real feasibility request from the browser
-6. fix any setup or API-contract issues
+Do not add infrastructure by default. Use measurements to choose the next subsystem.
 
-## day 2 field test - 2026-09-07
+### candidate-generation experiment
 
-Do not add features before the first 8-12 real saves are tested.
+1. build a small open-data POI prototype
+2. evaluate candidate recall@k against a labeled real-place set
+3. compare with a live provider
+4. keep multi-source retrieval only if it improves recall enough to justify complexity
 
-After the test, fix failures in this order:
+### real artifact benchmark
 
-1. false confident resolution
-2. missing / wrong feasibility facts
-3. retrieval miss
-4. setup latency / tool failure
-5. UI friction
+Separate the pipeline into three measured stages:
 
-## after first field test
+1. **extraction:** did the screenshot produce supported clues?
+2. **candidate generation:** did the correct place appear in top-k?
+3. **resolution:** given candidates, did the policy resolve/review correctly?
 
-### retrieval depth
+Track latency, provider/model errors, and approximate cost in addition to accuracy.
 
-- Vertex embeddings
-- Cloud SQL Postgres + pgvector
-- hybrid semantic + lexical + structured filters
-- retrieval eval set and recall@k
+### infrastructure only when earned
 
-### product depth
+- Postgres/PostGIS/pg_trgm if local POI/search indexing needs it
+- pgvector if semantic retrieval beats lexical/structured baselines
+- Redis worker if synchronous ingestion latency/retry behavior becomes a real product problem
+- hosted deployment once a zero-cost provider/account is connected
 
-- map view with saved-place pins
-- source provenance + evidence view
-- better manual resolution UI
-- bulk import adapters
-- feedback capture
+## interview hardening after share
 
-### production depth
+Once the repository is circulating, shift from implementation speed to ownership:
 
-- Cloud Run container
-- private Cloud Storage
-- Secret Manager
-- least-privilege service account
-- Cloud Build GitHub trigger
-- Terraform for all resources
-- structured trace events + latency / error metrics
-
-## deliberately deferred
-
-- generic recommendations from the open web
-- unrestricted URL scraping
-- fully autonomous agent loop
-- multi-user collaboration
-- social account login
-- polished animations
-
-The project should first prove that a personal save can be resolved correctly and turned into a grounded, useful decision in the real world.
-
-## checkpoint - 2026-09-09
-
-Offline hardening completed before live cloud integration:
-
-- retrieval no longer returns every saved place for a specific unmatched query
-- feasibility checks run concurrently with a bounded fan-out
-- ambiguous resolver candidates persist across restarts for manual review
-- manual confirmation trusts the stored candidate snapshot instead of client-supplied fields
-- request tracing captures ids, status, and latency without logging query text
-- mocked Places / Routes contract tests cover request shape and response parsing
-- SQLite migration keeps pre-candidate local databases usable
-
-Next critical path remains unchanged: configure GCP, run real screenshots through Vertex + Places, then validate live hours/routes from a real location.
-
-
-## checkpoint - 2026-09-10
-
-Additional offline work before live GCP integration:
-
-- candidate ids, names, and coordinates now have bounded validation
-- saved memories can be deleted through the API and UI
-- image upload media type and size boundaries are covered by API tests
-- pytest path setup is repository-local, so CI and local test commands match
-- Maps client contract tests now cover missing coordinates, unknown hours, and no-route responses
-- frontend origin is configurable for later deployment without widening CORS
-
-The project is intentionally not adding semantic retrieval or more ingestion sources yet. The next information-bearing step is still a real Vertex + Places + Routes run.
+- explain every major boundary from first principles
+- reproduce the Nominatim failure and provider decision
+- defend the resolver metrics/thresholds
+- diagnose injected failures without copy-paste
+- explain HTTP/TCP/TLS, async/concurrency, DB indexing, Docker, CI, secrets, and retry/idempotency concepts where they appear in the project

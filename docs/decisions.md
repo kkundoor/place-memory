@@ -1,37 +1,61 @@
 # decisions
 
-## 001 - resolve before retrieval
+## 001 - resolve before treating a save as canonical
 
-**decision:** unresolved artifacts can be stored, but they are not treated as canonical places.
+**decision:** unresolved artifacts may be stored, but they are not treated as canonical places.
 
-**why:** a false confident place match is worse than an unresolved save. The product only becomes useful if the map and feasibility answers are trustworthy.
+**why:** a false confident place match is worse than an unresolved save because later retrieval/routing decisions inherit the error.
 
-## 002 - typed tool flow over free-form agent loop
+## 002 - typed tool flow over a free-form agent loop
 
-**decision:** v1 uses explicit Python services and typed tool boundaries instead of giving an LLM arbitrary control.
+**decision:** core place resolution uses explicit services and typed boundaries.
 
-**why:** easier to test, trace, and explain. We can add a planner later without coupling the core place logic to one agent framework.
+**why:** canonical identity needs inspectable, testable behavior. Agentic clients can consume the result through MCP without bypassing the safety policy.
 
-## 003 - sqlite locally, postgres in cloud
+## 003 - keep SQLite for the first shareable single-user version
 
-**decision:** keep the repository interface database-agnostic on day 1.
+**decision:** do not migrate persistence simply to add infrastructure keywords.
 
-**why:** tomorrow's field test should not depend on cloud provisioning. Production still targets Cloud SQL Postgres + pgvector.
+**why:** SQLite already supports the current scale, tests, candidate persistence, and local run path. Postgres/PostGIS is reserved for a measured retrieval/indexing need.
 
-## 004 - maps apis own facts
+## 004 - separate model interpretation from external facts
 
-**decision:** Places and Routes own canonical place ids, hours, distance, and travel duration.
+**decision:** Gemini extracts supported clues; providers/routing systems own real-world identity and operational facts.
 
-**why:** these are externally verifiable facts. The model should interpret messy user artifacts, not guess operational data.
+**why:** the model should not guess addresses, opening status, or travel time.
 
-## 005 - accuracy before ingestion breadth
+## 005 - provider-neutral place search
 
-**decision:** screenshot/text/note plus optional source url is enough for the first test.
+**decision:** the resolver depends on `PlaceSearchClient`, not on Google or Nominatim directly.
 
-**why:** supporting every social platform before measuring place-resolution quality would hide the core risk behind integration work.
+**why:** live testing showed that provider coverage can fail independently of ranking logic. Switching candidate sources should not require rewriting the resolver.
 
-## 006 - map image is proxied through the api
+## 006 - keep Nominatim as fallback, not POI authority
 
-**decision:** v1 renders the current saved-place set through the Maps Static API and proxies the image through the backend.
+**decision:** Nominatim remains useful for no-key development/geocoding but is not presented as sufficient commercial-POI coverage.
 
-**why:** the browser does not need the server Maps API key, and precise current-location coordinates are sent in a POST body instead of a map URL that is more likely to leak into client history or normal request logs.
+**why:** a known-positive business test returned zero candidates across exact-name and address variants. The failure occurred before ranking.
+
+## 007 - provenance is part of the candidate model
+
+**decision:** candidates carry provider and provider-specific identity in addition to normalized fields.
+
+**why:** future multi-source resolution, debugging, and explanation are difficult if source identity is discarded at ingestion.
+
+## 008 - false auto-resolution is the primary resolver safety metric
+
+**decision:** CI gates on the checked-in labeled resolver benchmark producing zero false automatic resolutions.
+
+**why:** review is acceptable friction; silently persisting the wrong canonical place breaks trust and contaminates later decisions.
+
+## 009 - MCP is an adapter, not the resolution engine
+
+**decision:** expose deterministic search/memory/explanation capabilities through MCP rather than converting identity resolution into an agent loop.
+
+**why:** this provides an agent-tool integration surface without making a safety-sensitive decision less inspectable.
+
+## 010 - no Kafka/Kubernetes/Redis until a measured problem requires them
+
+**decision:** do not add distributed infrastructure for portfolio signaling alone.
+
+**why:** current workload does not require high-throughput event replay, cluster orchestration, or a job queue. If ingestion latency/failure behavior later justifies asynchronous processing, the architecture can add a worker/queue with a concrete reason.

@@ -2,98 +2,161 @@
 
 ## product boundary
 
-The system is a **personal place-memory layer**, not a generic local search engine.
+Place Memory is a **personal place-memory system**, not a generic recommendation engine. It starts from the user's own saved artifacts and tries to identify the real place behind each save.
 
-It should answer from the user's own saves first. External place APIs are used to identify and verify those saves, not to silently replace them with generic recommendations.
+The core safety rule is simple:
 
-## v1 dependency graph
+> model interpretation can create evidence, but it cannot create canonical identity by itself.
 
-```text
-source artifact
-    |
-    v
-extractor ---------> structured place hint
-    |                         |
-    |                         v
-    |                  place resolver -------> Google Places
-    |                         |
-    |                         v
-    +-----------------> evidence record
-                              |
-                              v
-                         memory store
-                         /          \
-                        v            v
-                 retrieval       feasibility -------> Google Routes
-                        \            /
-                         v          v
-                           response
-```
-
-The field test only depends on the vertical path from ingestion through resolution, storage, retrieval, and feasibility. Auth, bulk import, social scraping, and a polished map do not block it.
-
-## design rules
-
-### 1. extraction is not truth
-
-The model can infer a place name, neighborhood, category, or address from an artifact. Those are hints only.
-
-A place becomes resolved only after a tool-backed candidate passes the confidence gate. Low-confidence or ambiguous results stay unresolved and require review.
-
-### 2. feasibility is deterministic
-
-The model does not invent whether a place is open or how long it takes to get there.
-
-Feasibility uses:
-
-- resolved place id
-- current location
-- current time
-- requested time budget
-- live opening-hours data when available
-- live route duration when available
-
-The result is `yes`, `no`, or `uncertain`, with reasons.
-
-### 3. current location is request-scoped
-
-Current location is used to answer the current query and is not persisted by default.
-
-### 4. raw artifacts stay private
-
-Production target:
-
-- private Cloud Storage bucket for uploaded artifacts
-- Cloud Run service account with least-privilege access
-- secrets in Secret Manager
-- no raw screenshot text or precise location in normal application logs
-
-## target gcp architecture
+## current system
 
 ```text
-React web
-   |
-   v
-Cloud Run API
-   |--- Vertex AI              extraction / query parsing / embeddings
-   |--- Google Places          canonical place identity / hours
-   |--- Google Routes          travel time / distance
-   |--- Cloud SQL Postgres     memories + structured metadata + pgvector
-   |--- Cloud Storage          private source artifacts
-   |--- Secret Manager         API secrets
-   |
-Cloud Logging / trace metadata (ids, latency, tool result status; no raw private content)
+                           ┌─────────────────────┐
+                           │ React / TypeScript  │
+                           └──────────┬──────────┘
+                                      │
+                               FastAPI boundary
+                                      │
+                 ┌────────────────────┼────────────────────┐
+                 │                    │                    │
+                 ▼                    ▼                    ▼
+        Gemini extraction      place resolution      retrieval /
+        text + screenshot      + confidence gate     feasibility
+                 │                    │                    │
+                 │          ┌─────────┴─────────┐          │
+                 │          ▼                   ▼          │
+                 │      Google Places       Nominatim      │
+                 │      when configured      fallback      │
+                 │          │                   │          │
+                 └──────────┴──── normalized ───┴──────────┘
+                                      │
+                                      ▼
+                             SQLite memory store
+                                      │
+                        ┌─────────────┴─────────────┐
+                        ▼                           ▼
+                  React product UI            MCP adapter
 ```
 
-Terraform owns infrastructure. Cloud Build runs tests and deploys from GitHub after the local vertical slice is stable.
+## resolution boundary
 
-## later, not day 1
+`PlaceSearchClient` is a capability contract: given a `PlaceHint`, return normalized real-world place candidates.
 
-- direct TikTok / Instagram / Reddit ingestion
-- Google Maps saved-list import
-- bulk background processing
-- pgvector + hybrid ranking
-- map clustering
-- multi-user auth
-- MCP exposure
-- agent runtime / richer tool planner
+The resolver does not know whether candidates came from Google, Nominatim, an open POI corpus, or a future provider. It only sees the internal `RawPlace` representation.
+
+```text
+provider response
+      ↓
+normalize
+      ↓
+RawPlace
+      ↓
+name similarity
+location similarity
+category similarity
+      ↓
+PlaceCandidate + provenance
+      ↓
+confidence + ambiguity gap
+      ↓
+resolved / needs_review / unresolved
+```
+
+That split matters because provider recall and resolver precision fail differently. A provider can return zero candidates even when the ranking logic is correct.
+
+## why resolution is deterministic
+
+Canonical identity is persisted and later affects retrieval, maps, routing, and feasibility. A confident hallucination therefore compounds into later answers.
+
+The current resolver uses explicit weighted similarity plus two safety constraints:
+
+- minimum confidence threshold
+- minimum score separation from the second candidate
+
+Ambiguous results go to review. Missing candidates remain unresolved.
+
+The exact weights are still a baseline, not a final claim. They are measured by the checked-in resolver benchmark rather than treated as self-evidently correct.
+
+## evidence and provenance
+
+Each normalized candidate carries:
+
+- provider
+- provider-specific id
+- name
+- formatted address
+- coordinates
+- type/category evidence
+- resolver score
+- score components
+
+The API exposes `GET /api/memories/{id}/resolution` so the final decision can be inspected rather than inferred from an opaque model response.
+
+## model boundary
+
+Gemini performs multimodal interpretation only:
+
+```text
+artifact → PlaceHint
+```
+
+A `PlaceHint` may contain supported name, city, address, category, and evidence. Unsupported details are not supposed to be invented by the extractor prompt.
+
+The next extraction-level evaluation must use real screenshots and score model extraction separately from provider recall and resolver ranking.
+
+## MCP boundary
+
+The MCP server is an adapter over the deterministic application, not the owner of place identity.
+
+Current tools expose:
+
+- saved-place search
+- memory lookup
+- resolution explanation
+
+This allows an external agent to consume grounded state while preserving the same confidence/review policy used by the UI and API.
+
+## feasibility boundary
+
+Feasibility remains deterministic and may return `uncertain` when live facts are unavailable.
+
+It uses:
+
+- resolved memory
+- request-scoped current location
+- time budget
+- opening status when available
+- route duration when available
+
+The model never invents whether a place is open or how long travel takes.
+
+## persistence
+
+SQLite is intentionally retained for the first shareable single-user version. It already supports candidate snapshots and lightweight migration, and replacing it before the golden path is proven would add complexity without changing reviewer-visible behavior.
+
+The next data-depth milestone is likely Postgres + PostGIS/pg_trgm/pgvector **only if** open-data candidate retrieval or hybrid retrieval demonstrates a concrete need.
+
+## privacy and failure policy
+
+- precise current location is request-scoped and not persisted by default
+- normal request logs record ids/path/status/latency, not query text
+- uploaded images have type and size limits
+- API secrets live in environment variables, never source control
+- confirmation trusts the stored candidate snapshot instead of client-supplied fields
+- missing external facts produce `uncertain`, not fabricated certainty
+
+## next architecture experiment
+
+The highest-value next experiment is an open POI candidate engine:
+
+```text
+regional open POI corpus
+        ↓
+spatial + text candidate retrieval
+        ↓
+provider-neutral RawPlace candidates
+        ↓
+existing resolver
+```
+
+It should be adopted only if measured candidate recall improves enough to justify the additional data/indexing complexity.
