@@ -4,17 +4,24 @@ steps:
     entrypoint: bash
     args:
       - -c
-      - pip install -r requirements.txt && pytest -q
+      - pip install -r requirements.txt && pytest -q && python ../evals/run_resolution_eval.py
+
+  - name: node:22
+    dir: web
+    entrypoint: bash
+    args:
+      - -c
+      - npm ci && npm run build
 
   - name: gcr.io/cloud-builders/docker
     args:
       - build
       - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/place-memory-api:$COMMIT_SHA
-      - api
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/place-memory:$COMMIT_SHA
+      - .
 
 images:
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/place-memory-api:$COMMIT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/place-memory:$COMMIT_SHA
 
 substitutions:
   _REGION: us-central1

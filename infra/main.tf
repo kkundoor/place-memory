@@ -16,15 +16,10 @@ provider "google" {
   region  = var.region
 }
 
-# day 1: document the production boundary without provisioning paid resources yet
+# Optional future GCP deployment boundary. No paid data resources are provisioned here.
 resource "google_project_service" "run" {
   project = var.project_id
   service = "run.googleapis.com"
-}
-
-resource "google_project_service" "aiplatform" {
-  project = var.project_id
-  service = "aiplatform.googleapis.com"
 }
 
 resource "google_project_service" "secretmanager" {

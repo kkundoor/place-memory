@@ -1,0 +1,28 @@
+services:
+  api:
+    build: ./api
+    environment:
+      APP_ENV: local
+      DATABASE_PATH: /data/place_memory.db
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      NOMINATIM_BASE_URL: https://nominatim.openstreetmap.org
+      NOMINATIM_USER_AGENT: place-memory/0.2 (+https://github.com/kkundoor/place-memory)
+      WEB_ORIGIN: http://localhost:5173
+    ports:
+      - '8000:8080'
+    volumes:
+      - place_memory_data:/data
+
+  web:
+    build: ./web
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - '5173:5173'
+    depends_on:
+      - api
+
+volumes:
+  place_memory_data:
