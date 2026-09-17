@@ -98,8 +98,12 @@ def delete_memory(memory_id: str) -> Response:
 
 @app.post('/api/memories/ingest')
 async def ingest_memory(data: MemoryCreate) -> dict:
-    memory = store.create(data)
-    hint = data.hint or await extractor.extract_text(data.source_text)
+    try:
+        hint = data.hint or await extractor.extract_text(data.source_text)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    memory = store.create(data.model_copy(update={'hint': hint}))
     if not place_search.enabled:
         updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
         return {'memory': updated, 'candidates': [], 'warning': 'place search is not configured'}

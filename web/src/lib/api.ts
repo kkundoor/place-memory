@@ -29,7 +29,10 @@ export async function ingestMemory(sourceText: string, sourceUrl: string): Promi
       source_url: sourceUrl || null,
     }),
   });
-  if (!response.ok) throw new Error('could not ingest memory');
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || 'could not ingest memory');
+  }
   return response.json();
 }
 

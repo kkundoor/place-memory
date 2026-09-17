@@ -354,6 +354,23 @@ def test_ingest_keeps_memory_unresolved_when_place_provider_fails(client, monkey
     assert body['warning'] == 'place search is temporarily unavailable'
 
 
+def test_text_ingest_does_not_persist_partial_memory_when_extraction_fails(client, monkeypatch):
+    class FailingExtractor:
+        async def extract_text(self, text):
+            raise RuntimeError('gemini request failed; retry shortly')
+
+    monkeypatch.setattr(main, 'extractor', FailingExtractor())
+
+    response = client.post('/api/memories/ingest', json={
+        'source_type': 'note',
+        'source_text': 'Michigan Stadium in Ann Arbor',
+    })
+
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'gemini request failed; retry shortly'
+    assert client.get('/api/memories').json() == []
+
+
 def test_text_ingest_runs_extraction_resolution_and_persistence(client, monkeypatch):
     from app.clients.google_maps import RawPlace
     from app.models import PlaceHint

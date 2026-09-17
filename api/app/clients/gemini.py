@@ -35,6 +35,7 @@ class GeminiExtractor:
 
     def _generate(self, contents) -> PlaceHint:
         from google import genai
+        from google.genai import errors
         from google.genai import types
 
         client = genai.Client(api_key=self.api_key)
@@ -50,6 +51,8 @@ class GeminiExtractor:
             )
             parsed = response.parsed
             return parsed if isinstance(parsed, PlaceHint) else PlaceHint.model_validate(parsed)
+        except errors.APIError as exc:
+            raise RuntimeError('gemini request failed; retry shortly') from exc
         finally:
             client.close()
 
