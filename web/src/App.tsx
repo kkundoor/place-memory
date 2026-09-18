@@ -1,19 +1,33 @@
 import { FormEvent, useEffect, useState } from 'react';
 
 import { MemoryCard } from './components/MemoryCard';
-import { confirmMemory, deleteMemory, getFeasible, getMap, ingestImage, ingestMemory, listMemories, rejectCandidates } from './lib/api';
+import {
+  confirmMemory,
+  deleteMemory,
+  getFeasible,
+  getMap,
+  ingestImage,
+  ingestMemory,
+  listMemories,
+  rejectCandidates,
+} from './lib/api';
 import type { FeasibleMemory, Memory, PlaceCandidate } from './types';
 import './styles.css';
 
+type SaveMode = 'note' | 'screenshot';
+
 export default function App() {
   const [memories, setMemories] = useState<Memory[]>([]);
+  const [saveMode, setSaveMode] = useState<SaveMode>('note');
   const [sourceText, setSourceText] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [image, setImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [saveMessage, setSaveMessage] = useState('');
   const [query, setQuery] = useState('what from my saves is doable now?');
   const [minutes, setMinutes] = useState(120);
   const [results, setResults] = useState<FeasibleMemory[]>([]);
-  const [message, setMessage] = useState('');
+  const [nowMessage, setNowMessage] = useState('');
   const [mapImage, setMapImage] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -22,25 +36,42 @@ export default function App() {
   }
 
   useEffect(() => {
-    refresh().catch(() => setMessage('api is not running yet'));
+    refresh().catch(() => setSaveMessage('API is not running yet.'));
   }, []);
+
+  useEffect(() => {
+    if (!image) {
+      setImagePreview('');
+      return;
+    }
+    const url = URL.createObjectURL(image);
+    setImagePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [image]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!sourceText.trim() && !image) return;
+    if (saveMode === 'note' && !sourceText.trim()) return;
+    if (saveMode === 'screenshot' && !image) return;
+
     setBusy(true);
-    setMessage('resolving place...');
+    setSaveMessage(saveMode === 'screenshot' ? 'Analyzing screenshot…' : 'Resolving place…');
     try {
-      const response = image
+      const response = saveMode === 'screenshot' && image
         ? await ingestImage(image, sourceUrl.trim())
         : await ingestMemory(sourceText.trim(), sourceUrl.trim());
       setSourceText('');
       setSourceUrl('');
       setImage(null);
-      setMessage(response.warning || `saved as ${response.memory.resolution_status}`);
+      const statusMessage = {
+        resolved: 'Place identified and saved.',
+        needs_review: 'Saved — choose the right match below.',
+        unresolved: "Saved, but I couldn't identify the place yet.",
+      }[response.memory.resolution_status];
+      setSaveMessage(response.warning || statusMessage);
       await refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'could not save');
+      setSaveMessage(error instanceof Error ? error.message : 'Could not save.');
     } finally {
       setBusy(false);
     }
@@ -49,38 +80,38 @@ export default function App() {
   async function confirm(memory: Memory, candidate: PlaceCandidate) {
     try {
       await confirmMemory(memory, candidate);
-      setMessage('place confirmed');
+      setSaveMessage('Place confirmed.');
       await refresh();
     } catch {
-      setMessage('could not confirm place');
+      setSaveMessage('Could not confirm place.');
     }
   }
 
   async function reject(memory: Memory) {
     try {
       await rejectCandidates(memory);
-      setMessage('kept unresolved — none of those matches were right');
+      setSaveMessage('Kept unresolved — none of those matches were right.');
       await refresh();
     } catch {
-      setMessage('could not reject candidates');
+      setSaveMessage('Could not reject candidates.');
     }
   }
 
   async function remove(memory: Memory) {
-    if (!window.confirm(`remove ${memory.place?.name || memory.hint?.name || 'this save'}?`)) return;
+    if (!window.confirm(`Remove ${memory.place?.name || memory.hint?.name || 'this save'}?`)) return;
     try {
       await deleteMemory(memory.id);
       setResults((current) => current.filter((result) => result.memory.id !== memory.id));
       setMapImage('');
-      setMessage('save removed');
+      setSaveMessage('Save removed.');
       await refresh();
     } catch {
-      setMessage('could not remove save');
+      setSaveMessage('Could not remove save.');
     }
   }
 
   async function checkNow() {
-    setMessage('getting current location...');
+    setNowMessage('Getting current location…');
     navigator.geolocation.getCurrentPosition(async (position) => {
       try {
         const next = await getFeasible(
@@ -90,15 +121,15 @@ export default function App() {
           minutes,
         );
         setResults(next);
-        setMessage('');
+        setNowMessage('');
 
         getMap(query, position.coords.latitude, position.coords.longitude, minutes)
           .then(setMapImage)
           .catch(() => setMapImage(''));
       } catch {
-        setMessage('could not check right now');
+        setNowMessage('Could not check right now.');
       }
-    }, () => setMessage('location permission is needed for this check'));
+    }, () => setNowMessage('Location permission is needed for this check.'));
   }
 
   return (
@@ -111,46 +142,125 @@ export default function App() {
         </p>
       </header>
 
-      <section className="panel">
-        <h2>add a save</h2>
+      <section className="panel save-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>add a save</h2>
+            <p>Paste a note or upload the screenshot you actually saved.</p>
+          </div>
+        </div>
+
+        <div className="mode-switch" role="tablist" aria-label="Save type">
+          <button
+            type="button"
+            className={saveMode === 'note' ? 'mode active' : 'mode'}
+            onClick={() => setSaveMode('note')}
+          >
+            Text / note
+          </button>
+          <button
+            type="button"
+            className={saveMode === 'screenshot' ? 'mode active' : 'mode'}
+            onClick={() => setSaveMode('screenshot')}
+          >
+            Screenshot
+          </button>
+        </div>
+
         <form onSubmit={save}>
-          <textarea
-            value={sourceText}
-            onChange={(event) => setSourceText(event.target.value)}
-            placeholder="paste a place, caption, note, or screenshot text"
-          />
-          <input
-            value={sourceUrl}
-            onChange={(event) => setSourceUrl(event.target.value)}
-            placeholder="source link (optional)"
-          />
-          <label className="file-input">
-            <span>{image ? image.name : 'or add a screenshot'}</span>
+          {saveMode === 'note' ? (
+            <label className="field">
+              <span>What did you save?</span>
+              <textarea
+                value={sourceText}
+                onChange={(event) => setSourceText(event.target.value)}
+                placeholder="e.g. Zingerman's Deli in Ann Arbor — want to try the sandwiches"
+              />
+            </label>
+          ) : (
+            <label className={`upload-box ${image ? 'has-file' : ''}`}>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => setImage(event.target.files?.[0] || null)}
+              />
+              {imagePreview ? (
+                <img className="upload-preview" src={imagePreview} alt="Selected screenshot preview" />
+              ) : (
+                <span className="upload-icon" aria-hidden="true">↑</span>
+              )}
+              <strong>{image ? image.name : 'Upload a screenshot'}</strong>
+              <span>{image ? 'Click to choose a different image' : 'PNG, JPG, or WebP · up to 8 MB'}</span>
+            </label>
+          )}
+
+          <label className="field">
+            <span>Source link <em>optional</em></span>
             <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(event) => setImage(event.target.files?.[0] || null)}
+              value={sourceUrl}
+              onChange={(event) => setSourceUrl(event.target.value)}
+              placeholder="https://…"
             />
           </label>
-          <button type="submit" disabled={busy}>{busy ? 'working...' : 'save + resolve'}</button>
+
+          <button type="submit" disabled={busy || (saveMode === 'note' ? !sourceText.trim() : !image)}>
+            {busy ? 'Working…' : saveMode === 'screenshot' ? 'Analyze screenshot' : 'Save + resolve'}
+          </button>
         </form>
+        {saveMessage && <p className="message save-message">{saveMessage}</p>}
       </section>
 
-      <section className="panel">
-        <h2>right now</h2>
-        <div className="query-row">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} />
-          <input
-            className="minutes"
-            type="number"
-            min={15}
-            max={720}
-            value={minutes}
-            onChange={(event) => setMinutes(Number(event.target.value))}
-          />
-          <button onClick={checkNow}>check</button>
+      <section>
+        <div className="section-title">
+          <div>
+            <h2>saved places</h2>
+            <p>Review anything uncertain before it becomes canonical.</p>
+          </div>
+          <span className="count">{memories.length}</span>
         </div>
-        {message && <p className="message">{message}</p>}
+        {memories.length === 0 ? (
+          <div className="empty-state">Your resolved and unresolved saves will appear here.</div>
+        ) : (
+          <div className="grid">
+            {memories.map((memory) => (
+              <MemoryCard
+                key={memory.id}
+                memory={memory}
+                onConfirm={confirm}
+                onReject={reject}
+                onDelete={remove}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="panel right-now-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>what can I do right now?</h2>
+            <p>Use your current location and available time to filter resolved saves.</p>
+          </div>
+        </div>
+        <div className="query-row">
+          <label className="field query-field">
+            <span>Question</span>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} />
+          </label>
+          <label className="field minutes-field">
+            <span>Minutes</span>
+            <input
+              className="minutes"
+              type="number"
+              min={15}
+              max={720}
+              value={minutes}
+              onChange={(event) => setMinutes(Number(event.target.value))}
+            />
+          </label>
+          <button onClick={checkNow}>Find doable saves</button>
+        </div>
+        {nowMessage && <p className="message">{nowMessage}</p>}
         {mapImage && <img className="map" src={mapImage} alt="Saved places near the current location" />}
         <div className="results">
           {results.map((result) => (
@@ -164,26 +274,8 @@ export default function App() {
         </div>
       </section>
 
-      <section>
-        <div className="section-title">
-          <h2>saved</h2>
-          <span>{memories.length}</span>
-        </div>
-        <div className="grid">
-          {memories.map((memory) => (
-            <MemoryCard
-              key={memory.id}
-              memory={memory}
-              onConfirm={confirm}
-              onReject={reject}
-              onDelete={remove}
-            />
-          ))}
-        </div>
-      </section>
-
       <footer className="attribution">
-        Place-search fallback data © OpenStreetMap contributors. Live provider data may be used when configured.
+        Place data © OpenStreetMap contributors. Live provider data may be used when configured.
       </footer>
     </main>
   );

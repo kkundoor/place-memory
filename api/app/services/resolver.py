@@ -15,23 +15,31 @@ AUTO_NAME_FLOOR = 0.85
 AUTO_SIGNAL_FLOOR = 0.80
 DEDUP_DISTANCE_METERS = 50.0
 
+CATEGORY_ALIASES: dict[str, str] = {
+    'art museum': 'museum',
+    'arts museum': 'museum',
+    'coffee shop': 'cafe',
+    'coffee_shop': 'cafe',
+    'delicatessen': 'deli',
+    'grocery store': 'grocery',
+    'supermarket': 'grocery',
+    'boat rental': 'boat_rental',
+    'boat_rental': 'boat_rental',
+}
+
 CATEGORY_COMPATIBILITY: dict[str, set[str]] = {
     'bakery': {'bakery'},
     'cafe': {'cafe'},
-    'coffee shop': {'cafe'},
-    'coffee_shop': {'cafe'},
-    'delicatessen': {'deli', 'restaurant'},
     'deli': {'deli', 'restaurant'},
     'restaurant': {'restaurant', 'deli'},
     'museum': {'museum'},
-    'arts centre': {'museum'},
-    'arts_centre': {'museum'},
     'stadium': {'stadium'},
     'bar': {'bar', 'restaurant'},
     'pub': {'bar', 'restaurant'},
     'grocery': {'grocery'},
-    'grocery store': {'grocery'},
-    'supermarket': {'grocery'},
+    'lake': {'lake'},
+    'park': {'park'},
+    'boat_rental': {'boat_rental'},
 }
 
 GENERIC_IDENTITY_NAMES = {
@@ -52,10 +60,35 @@ def _norm(value: str | None) -> str:
     return ' '.join(re.findall(r'[a-z0-9]+', text))
 
 
+def _canonical_category(value: str | None) -> str:
+    normalized = _norm(value)
+    return CATEGORY_ALIASES.get(normalized, normalized)
+
+
+def _name_score_details(
+    hint: PlaceHint,
+    place: RawPlace | PlaceCandidate,
+) -> tuple[float | None, str | None]:
+    target = _norm(hint.name)
+    if not target:
+        return None, None
+
+    names = [('canonical', place.name)]
+    names.extend(('alias', alias) for alias in getattr(place, 'aliases', []))
+    best_score = -1.0
+    best_source = None
+    best_value = None
+    for source, value in names:
+        score = ratio(target, _norm(value)) / 100
+        if score > best_score:
+            best_score = score
+            best_source = source
+            best_value = value
+    return best_score, f'{best_source}:{best_value}' if best_source and best_value else None
+
+
 def _name_score(hint: PlaceHint, place: RawPlace | PlaceCandidate) -> float | None:
-    if not _norm(hint.name):
-        return None
-    return ratio(_norm(hint.name), _norm(place.name)) / 100
+    return _name_score_details(hint, place)[0]
 
 
 def _location_score(hint: PlaceHint, place: RawPlace | PlaceCandidate) -> float | None:
@@ -92,6 +125,12 @@ def _entity_family(place: RawPlace | PlaceCandidate) -> str:
         return 'bar'
     if tags & {'supermarket', 'grocery', 'grocery store', 'convenience'}:
         return 'grocery'
+    if tags & {'lake', 'water'}:
+        return 'lake'
+    if tags & {'park', 'garden'}:
+        return 'park'
+    if tags & {'boat rental', 'boat_rental'}:
+        return 'boat_rental'
     if 'dairy' in tags:
         return 'dairy'
     if 'office' in tags:
@@ -102,7 +141,7 @@ def _entity_family(place: RawPlace | PlaceCandidate) -> str:
 
 
 def _category_score(hint: PlaceHint, place: RawPlace | PlaceCandidate) -> float | None:
-    category = _norm(hint.category_hint)
+    category = _canonical_category(hint.category_hint)
     if not category:
         return None
     allowed = CATEGORY_COMPATIBILITY.get(category)
@@ -115,14 +154,13 @@ def _category_score(hint: PlaceHint, place: RawPlace | PlaceCandidate) -> float 
 
 
 def _category_eligible(hint: PlaceHint, place: RawPlace) -> bool:
-    category = _norm(hint.category_hint)
-    allowed = CATEGORY_COMPATIBILITY.get(category)
-    if allowed is None:
-        return True
     family = _entity_family(place)
     if family == 'non_venue':
         return False
-    if family == 'unknown':
+
+    category = _canonical_category(hint.category_hint)
+    allowed = CATEGORY_COMPATIBILITY.get(category)
+    if allowed is None or family == 'unknown':
         return True
     return family in allowed
 
@@ -131,7 +169,7 @@ def _is_generic_identity(hint: PlaceHint) -> bool:
     name = _norm(hint.name)
     if not name:
         return True
-    category = _norm(hint.category_hint)
+    category = _canonical_category(hint.category_hint)
     return (bool(category) and name == category) or name in GENERIC_IDENTITY_NAMES
 
 
@@ -181,17 +219,18 @@ def _dedupe_places(places: list[RawPlace]) -> list[RawPlace]:
 
 
 def score_candidate(hint: PlaceHint, place: RawPlace) -> PlaceCandidate:
-    name_score = _name_score(hint, place)
+    name_score, name_source = _name_score_details(hint, place)
     location_score = _location_score(hint, place)
     category_score = _category_score(hint, place)
     weighted = [(0.60, name_score), (0.25, location_score), (0.15, category_score)]
-    present = [(w, s) for w, s in weighted if s is not None]
+    present = [(weight, score) for weight, score in weighted if score is not None]
     confidence = (
-        sum(w * s for w, s in present) / sum(w for w, _ in present)
+        sum(weight * score for weight, score in present) / sum(weight for weight, _ in present)
         if present else 0.0
     )
     reasons = [
         f'name={name_score:.2f}' if name_score is not None else 'name=missing',
+        f'name_source={name_source}' if name_source else 'name_source=missing',
         f'location={location_score:.2f}' if location_score is not None else 'location=missing',
         f'category={category_score:.2f}' if category_score is not None else 'category=missing',
         f'entity_family={_entity_family(place)}',
@@ -201,6 +240,7 @@ def score_candidate(hint: PlaceHint, place: RawPlace) -> PlaceCandidate:
         provider=place.provider,
         provider_place_id=place.provider_place_id or place.place_id,
         name=place.name,
+        aliases=place.aliases,
         formatted_address=place.formatted_address,
         latitude=place.latitude,
         longitude=place.longitude,

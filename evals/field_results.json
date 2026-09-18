@@ -1,7 +1,7 @@
 {
   "corpus": "field",
   "summary": {
-    "cases": 5,
+    "cases": 6,
     "decision_mode_accuracy": 1.0,
     "top1_accuracy_on_labeled_cases": 1.0,
     "false_auto_resolution_rate": 0.0
@@ -71,6 +71,20 @@
       "top1_correct": null,
       "candidate_count": 0,
       "selected_id": null
+    },
+    {
+      "case": "historical place name resolves through provider alias",
+      "expected_mode": "auto",
+      "observed_mode": "auto",
+      "mode_correct": true,
+      "top_id": "photon:R:12908",
+      "top_confidence": 1.0,
+      "expected_top_ids": [
+        "photon:R:12908"
+      ],
+      "top1_correct": true,
+      "candidate_count": 1,
+      "selected_id": "photon:R:12908"
     }
   ]
 }

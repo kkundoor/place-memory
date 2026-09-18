@@ -21,10 +21,12 @@ def place(
     longitude: float,
     primary_type: str,
     types: list[str],
+    aliases: list[str] | None = None,
 ) -> RawPlace:
     return RawPlace(
         place_id=place_id,
         name=name,
+        aliases=aliases or [],
         formatted_address=address,
         latitude=latitude,
         longitude=longitude,
@@ -85,7 +87,7 @@ CASES = [
     ),
     FieldCase(
         name='dia duplicate osm representations',
-        hint=PlaceHint(name='Detroit Institute of Arts', city_hint='Detroit'),
+        hint=PlaceHint(name='Detroit Institute of Arts', city_hint='Detroit', category_hint='art museum'),
         candidates=[
             place('photon:N:10905214429', 'Detroit Institute of Arts', 'John R Street, Detroit, Michigan, 48203, United States', 42.3595402, -83.0641933, 'arts_centre', ['amenity', 'arts_centre']),
             place('photon:R:1553447', 'Detroit Institute of Arts', '5200 Woodward Avenue, Detroit, MI, 48202, United States', 42.3595055, -83.0645225, 'museum', ['tourism', 'museum']),
@@ -106,5 +108,30 @@ CASES = [
         ],
         expected_mode='abstain',
         expected_top_ids=set(),
+    ),
+    FieldCase(
+        name='historical place name resolves through provider alias',
+        hint=PlaceHint(
+            name='Stow Lake',
+            city_hint='San Francisco',
+            category_hint='lake',
+            activity_hint='boat rental',
+        ),
+        candidates=[
+            place(
+                'photon:R:12908',
+                'Blue Heron Lake',
+                'San Francisco, California, United States',
+                37.7689904,
+                -122.4728548,
+                'lake',
+                ['water', 'lake'],
+                aliases=['Stow Lake'],
+            ),
+            place('photon:W:673500610', 'Blue Heron Lake Drive', 'San Francisco, California, 94122, United States', 37.7710724, -122.4750211, 'pedestrian', ['highway', 'pedestrian']),
+            place('photon:W:120479803', 'Blue Heron Lake Boathouse & Bike Rental', 'Blue Heron Lake Drive, San Francisco, California, 94122, United States', 37.7706117, -122.4771078, 'boat_rental', ['amenity', 'boat_rental']),
+        ],
+        expected_mode='auto',
+        expected_top_ids={'photon:R:12908'},
     ),
 ]

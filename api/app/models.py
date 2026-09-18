@@ -28,6 +28,7 @@ class PlaceHint(BaseModel):
     city_hint: str | None = Field(default=None, max_length=120)
     address_hint: str | None = Field(default=None, max_length=300)
     category_hint: str | None = Field(default=None, max_length=100)
+    activity_hint: str | None = Field(default=None, max_length=100)
     evidence: str | None = Field(default=None, max_length=1500)
 
 
@@ -36,6 +37,7 @@ class PlaceCandidate(BaseModel):
     provider: str = Field(default='unknown', min_length=1, max_length=80)
     provider_place_id: str | None = Field(default=None, max_length=300)
     name: str = Field(min_length=1, max_length=300)
+    aliases: list[str] = Field(default_factory=list, max_length=50)
     formatted_address: str | None = Field(default=None, max_length=500)
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)

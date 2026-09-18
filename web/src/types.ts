@@ -3,6 +3,7 @@ export type PlaceHint = {
   city_hint?: string | null;
   address_hint?: string | null;
   category_hint?: string | null;
+  activity_hint?: string | null;
   evidence?: string | null;
 };
 
@@ -11,10 +12,12 @@ export type PlaceCandidate = {
   provider: string;
   provider_place_id?: string | null;
   name: string;
+  aliases?: string[];
   formatted_address?: string | null;
   latitude: number;
   longitude: number;
   primary_type?: string | null;
+  types: string[];
   confidence: number;
   confidence_reasons?: string[];
 };

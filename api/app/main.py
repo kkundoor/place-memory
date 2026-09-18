@@ -10,6 +10,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.clients.enriched import AliasEnrichedPlaceSearchClient
 from app.clients.gemini import GeminiExtractor
 from app.clients.google_maps import GoogleMapsClient
 from app.clients.nominatim import NominatimClient
@@ -39,10 +40,11 @@ store = MemoryStore(settings.database_path)
 maps = GoogleMapsClient(settings.google_maps_api_key)
 photon = PhotonClient(settings.photon_base_url, settings.photon_user_agent)
 nominatim = NominatimClient(settings.nominatim_base_url, settings.nominatim_user_agent)
-place_search = maps if maps.enabled else photon if photon.enabled else nominatim
+photon_with_aliases = AliasEnrichedPlaceSearchClient(photon, nominatim)
+place_search = maps if maps.enabled else photon_with_aliases if photon.enabled else nominatim
 extractor = GeminiExtractor(settings)
 
-app = FastAPI(title='place memory api', version='0.2.0')
+app = FastAPI(title='place memory api', version='0.3.0')
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.web_origin],
@@ -77,6 +79,7 @@ def health() -> dict:
         'place_search_enabled': place_search.enabled,
         'place_search_provider': (
             'google' if maps.enabled
+            else 'photon+nominatim-aliases' if photon.enabled and nominatim.enabled
             else 'photon' if photon.enabled
             else 'nominatim'
         ),

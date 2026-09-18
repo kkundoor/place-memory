@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 
@@ -16,6 +16,7 @@ class RawPlace:
     types: list[str]
     provider: str = 'google'
     provider_place_id: str | None = None
+    aliases: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -106,7 +107,6 @@ class GoogleMapsClient:
         hours = data.get('currentOpeningHours') or {}
         return PlaceStatus(open_now=hours.get('openNow'))
 
-
     async def static_map(self, origin: Origin, places: list[tuple[float, float]]) -> bytes | None:
         if not self.enabled:
             return None
@@ -139,14 +139,10 @@ class GoogleMapsClient:
             'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters',
         }
         body = {
-            'origin': {
-                'location': {
-                    'latLng': {
-                        'latitude': origin.latitude,
-                        'longitude': origin.longitude,
-                    }
-                }
-            },
+            'origin': {'location': {'latLng': {
+                'latitude': origin.latitude,
+                'longitude': origin.longitude,
+            }}},
             'destination': {'placeId': place_id},
             'travelMode': 'DRIVE',
             'routingPreference': 'TRAFFIC_AWARE',

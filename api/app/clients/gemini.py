@@ -59,14 +59,18 @@ class GeminiExtractor:
     @staticmethod
     def _instruction(source: str) -> str:
         return (
-            'Extract the most likely real-world place from this saved artifact. '
+            'Extract the most likely specific real-world place from this saved artifact. '
             'Return only evidence visible or directly supported by the artifact. '
-            'Do not guess an address, city, category, or identity that is not supported. '
+            'Do not guess an address, city, category, activity, or identity that is not supported. '
             'The name must be a specific place or business name, not a generic category. '
-            'If no specific place or business identity is visible or directly supported, '
-            'set name to null. Generic phrases such as coffee shop, bakery, restaurant, '
-            'museum, or cafe belong in category_hint rather than name. '
-            'Do not treat a social account name as the place unless they are clearly the same. '
+            'If no specific place or business identity is visible or directly supported, set name to null. '
+            'category_hint means the type of the named place itself, for example lake, museum, cafe, '
+            'restaurant, bakery, park, or stadium. Do not put an activity in category_hint. '
+            'If an activity is explicitly shown or stated, such as boat rental, hiking, coffee, or kayaking, '
+            'put that in activity_hint instead. Generic phrases such as coffee shop or bakery may be used as '
+            'category_hint only when no more specific entity type is supported. '
+            'Do not treat a social account name or search suggestion as the place unless the artifact clearly '
+            'supports that they refer to the depicted/saved place. '
             f'Artifact:\n{source}'
         )
 
