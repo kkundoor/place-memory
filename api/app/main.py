@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from app.clients.gemini import GeminiExtractor
 from app.clients.google_maps import GoogleMapsClient
 from app.clients.nominatim import NominatimClient
+from app.clients.photon import PhotonClient
 from app.config import get_settings
 from app.models import (
     FeasibilityRequest,
@@ -35,8 +36,9 @@ logger = logging.getLogger('place_memory.api')
 settings = get_settings()
 store = MemoryStore(settings.database_path)
 maps = GoogleMapsClient(settings.google_maps_api_key)
+photon = PhotonClient(settings.photon_base_url, settings.photon_user_agent)
 nominatim = NominatimClient(settings.nominatim_base_url, settings.nominatim_user_agent)
-place_search = maps if maps.enabled else nominatim
+place_search = maps if maps.enabled else photon if photon.enabled else nominatim
 extractor = GeminiExtractor(settings)
 
 app = FastAPI(title='place memory api', version='0.2.0')
@@ -72,7 +74,11 @@ def health() -> dict:
     return {
         'status': 'ok',
         'place_search_enabled': place_search.enabled,
-        'place_search_provider': 'google' if maps.enabled else 'nominatim',
+        'place_search_provider': (
+            'google' if maps.enabled
+            else 'photon' if photon.enabled
+            else 'nominatim'
+        ),
         'maps_enabled': maps.enabled,
         'gemini_enabled': extractor.enabled,
     }
