@@ -1,91 +1,138 @@
-# field test - 2026-09-17
+# field test — 2026-09-17
 
-## environment
+This file records the live behaviors that changed the resolver design.
 
-- branch: `resolver-redesign-spec`
-- commit: `67655d832e03be753e1f252c0cb6a0878f97fda1`
-- candidate provider: Photon
-- Gemini extraction: enabled
-- Google Maps/routing: disabled
+The live JSON captures were taken at different commits and from reseeded local databases. The checked-in field corpus is a set of repeatable scenario fixtures distilled from those runs; it is not one continuously-growing database export.
 
-## live cases
+## before the resolver redesign
 
-### anonymous coffee-shop note
+Live testing surfaced several failures that the original clean fixture set did not catch:
 
-Input contained a generic coffee-shop description with no actual identity anchor.
+- generic place descriptions could trigger global candidate search
+- missing evidence could still contribute confidence
+- correct city evidence could lower a score
+- incompatible entity classes could survive into review
+- duplicate OSM records could create false ambiguity
+- manual confirmation was not represented separately from automatic resolution
 
-Result:
+Those findings became resolver invariants before the implementation was changed.
 
-- status: `unresolved`
-- method: `abstained`
-- candidates: 0
+See [`resolver-redesign-spec.md`](resolver-redesign-spec.md).
 
-This validates the no-identity gate: the system does not globally search a generic category and manufacture a place.
+## post-redesign checks
+
+### generic coffee-shop note
+
+A note describing "this coffee shop" without an actual place identity now produces:
+
+- `status: unresolved`
+- `resolution_method: abstained`
+- zero candidates
+
+The system does not invent an identity from a generic category.
 
 ### Zingerman's typo
 
-Input: `Zingermans Delicatessen in Ann Arbor - want to go here for sandwiches sometime`
+Input:
 
-Result before user confirmation:
+```text
+Zingermans Delicatessen in Ann Arbor - want to go here for sandwiches sometime
+```
 
-- status: `needs_review`
-- top candidate: Zingerman's Deli
-- pre-resolution match score: 0.8615
-- pre-resolution gap: 0.0797
+The correct Deli candidate ranked first, but the gap to another Zingerman's location was below the automatic-resolution bar.
 
-After the user chose the Deli:
+Result before confirmation:
 
-- status: `resolved`
-- method: `manual`
-- original score/gap preserved
+- `status: needs_review`
+- top candidate: `Zingerman's Deli`
+- score: `0.8615`
+- gap: `0.0797`
 
-This validates typo-tolerant retrieval, ambiguity review, and truthful manual provenance.
+After the user selected the Deli:
+
+- `status: resolved`
+- `resolution_method: manual`
+- the original score and gap remained unchanged
 
 ### Detroit Institute of Arts
 
-Input: `Detroit Institute of Arts in Detroit`
+Input:
+
+```text
+Detroit Institute of Arts in Detroit
+```
+
+Duplicate OSM representations were collapsed before ambiguity was measured.
 
 Result:
 
-- status: `resolved`
-- method: `auto`
-- score: 1.0
-- gap: 0.2259
+- `status: resolved`
+- `resolution_method: auto`
+- score: `1.0`
+- gap: `0.2259`
 
-Duplicate OSM representations no longer create false ambiguity.
+## Stow Lake screenshot: before alias support
 
-### real TikTok screenshot: Stow Lake
+The screenshot showed:
 
-The screenshot contained a small `STOW LAKE` logo on a pedal boat, a San Francisco location tag, and text about renting a pedal boat.
+- a small `STOW LAKE` logo on a pedal boat
+- a San Francisco location tag
+- text about renting a pedal boat
 
-Extraction:
+At commit `67655d8`, extraction identified `Stow Lake`, but the resolver only had ordinary string similarity against the current `Blue Heron Lake` name.
 
-- name: `Stow Lake`
-- city: `San Francisco`
-- category: `boat rental`
+The result was:
 
-Candidate retrieval returned current OSM entities headed by `Blue Heron Lake`, plus several road objects and the boathouse. The user confirmed `Blue Heron Lake`.
+- correct current place retrieved
+- score: `0.6471`
+- gap: `0.0706`
+- `resolution_method: manual` after user confirmation
+- road objects also appeared as candidates
 
-Result:
+This was not an alias-resolution success. It was the failure that motivated the alias and entity-semantics changes.
 
-- status: `resolved`
-- method: `manual`
-- pre-resolution score: 0.6471
-- pre-resolution gap: 0.0706
+## Stow Lake screenshot: after alias support
 
-This exposed three follow-up requirements:
+The same scenario was rerun at commit:
 
-1. historical/alternate-name enrichment (`Stow Lake` → current `Blue Heron Lake`)
-2. category semantics must distinguish the named entity type from an activity
-3. non-venue road objects should not survive simply because the category string is unrecognized
+```text
+3a90f803ea6ecfff54b9da33a0ead94835ed880e
+```
 
-## next work
+The live capture showed:
 
-- enrich OSM candidates with alternate/historical names using stable OSM IDs
-- keep alias enrichment optional and non-fatal
-- separate `category_hint` from `activity_hint`
-- normalize common category synonyms through an explicit table
-- filter non-venue OSM classes before ranking
-- improve upload and review UX before the next screenshot batch
+```text
+hint.name: Stow Lake
+hint.city_hint: San Francisco
+hint.category_hint: lake
+hint.activity_hint: pedal boat rental
 
-The original live JSON snapshot is retained outside the application database so this behavior remains auditable after fixes.
+place.name: Blue Heron Lake
+resolution_status: resolved
+resolution_method: auto
+pre_resolution_confidence: 1.0
+pre_resolution_gap: 1.0
+
+name=1.00
+name_source=alias:Stow Lake
+location=1.00
+category=1.00
+entity_family=lake
+```
+
+This is the first live capture that proves the historical-name mechanism supplied the winning name evidence for this screenshot.
+
+That same capture exposed one follow-up bug: broad `name:*` parsing also pulled in etymology metadata that was not actually a place alias. The parser was then narrowed to explicit alias/history fields plus language-qualified `name:<language>` keys, with a regression test.
+
+## current field scenarios
+
+The repeatable field-regression corpus currently contains six distinct scenario types:
+
+1. Zingerman's typo + ambiguity
+2. Starbucks branch ambiguity
+3. Carissa's provider miss
+4. Detroit Institute of Arts duplicate records
+5. generic coffee-shop abstention
+6. Stow Lake historical-name resolution
+
+These are scenario fixtures derived from versioned runs, not six rows from one live database.

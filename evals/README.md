@@ -1,46 +1,92 @@
 # evaluation
 
-Place Memory keeps evaluation close to the resolver because a wrong canonical identity is more damaging than asking for review.
+The resolver is evaluated separately from the model and the place-search provider so a failure can be assigned to the right stage.
 
-## corpora
+## three kinds of checks
 
-### synthetic
+### synthetic resolver cases
 
 `python evals/run_resolution_eval.py`
 
-The deterministic fixture suite covers clean resolver mechanics: exact names, typos, chain ambiguity, address disambiguation, category conflicts, abbreviations, same-name places in different cities, and missing candidates.
+Small controlled cases for mechanics such as:
 
-These numbers are fixture-level only; they are not a claim about live artifact accuracy.
+- exact names
+- typos
+- same-name places in different cities
+- chain ambiguity
+- category conflicts
+- incomplete evidence
+- missing candidates
 
-### field
-
-`python evals/run_field_resolution_eval.py`
-
-The field corpus is copied from actual product runs and intentionally preserves messy behavior. It currently covers:
-
-- typo-tolerant Zingerman retrieval
-- Starbucks branch ambiguity
-- Carissa's provider miss returning geographic entities
-- duplicate OSM representations of Detroit Institute of Arts
-- generic “coffee shop” evidence producing irrelevant global candidates
-- a screenshot whose visible historical name `Stow Lake` maps to the current canonical `Blue Heron Lake`
-
-Field metrics are reported separately from synthetic metrics. A clean synthetic number must never substitute for field behavior.
-
-## redesign invariant suite
+### resolver invariants
 
 `python -m pytest evals/spec_tests/test_resolver_redesign_spec.py -q`
 
-The invariant suite covers evidence sufficiency, monotonicity, explicit category semantics, entity-class eligibility, guarded deduplication, first-class resolution provenance, identity abstention, location conflicts, reachable auto-resolution, Unicode handling, and explicit candidate rejection.
+These protect behaviors discovered through field failures, including:
 
-## alias / historical-name regression
+- missing evidence does not add confidence
+- automatic resolution needs independent evidence
+- incompatible entity classes are filtered before ranking
+- duplicate provider records do not create false ambiguity
+- generic identity descriptions abstain before search
+- manual confirmation is represented separately from automatic resolution
+- wrong-city evidence blocks automatic resolution
+- Unicode survives normalization and persistence
+- review has an explicit "none of these" path
 
-Provider search results may use a current canonical name while a saved artifact contains a historical or alternate name. Candidate metadata can therefore include aliases sourced separately from search ranking. Resolver name scoring considers those aliases but still requires independent corroboration such as location or category before automatic resolution.
+### field regression scenarios
 
-The live provider-enrichment path is optional and non-fatal: if alias metadata is unavailable, candidate search continues without it.
+`python evals/run_field_resolution_eval.py`
 
-## primary safety metric
+These are repeatable fixtures distilled from actual product runs.
 
-The primary safety metric remains false automatic resolution rate. Review and abstention are expected outcomes, not failures by themselves.
+Current scenario types:
 
-Failures remain in their corpus after fixes so they become permanent regression cases.
+1. Zingerman's typo + ambiguity
+2. Starbucks branch ambiguity
+3. Carissa's provider miss
+4. Detroit Institute of Arts duplicate records
+5. generic coffee-shop abstention
+6. Stow Lake historical-name resolution
+
+The field corpus is not a continuously appended live database export. Live captures are versioned separately, then important failures are turned into stable regression scenarios.
+
+## alias collision
+
+Alias support creates its own failure mode: more than one real candidate can share the same historical or alternate name.
+
+A controlled regression case therefore checks that two equally plausible candidates sharing an alias remain in review. Alias evidence is not allowed to bypass the candidate-separation rule.
+
+## next real-artifact pilot
+
+The next evaluation pass is a curated set of roughly 12–15 real artifacts selected for failure-mode coverage rather than raw size.
+
+Target scenarios include:
+
+- exact unique place
+- typo / paraphrase
+- same-brand branch ambiguity
+- generic identity
+- provider miss
+- duplicate provider representations
+- historical alias
+- wrong-city contradiction
+- category mismatch
+- venue within venue
+- insufficient screenshot evidence
+- accented / Unicode name
+- partial or logo-only identity
+- conflicting artifact/context evidence
+
+For each artifact, record the stages separately:
+
+```text
+extraction correct?
+correct candidate retrieved?
+rank of correct candidate?
+expected decision: auto / review / abstain?
+observed decision correct?
+false automatic resolution?
+```
+
+That keeps extraction quality, candidate recall, ranking, and decision policy from being collapsed into one misleading number.

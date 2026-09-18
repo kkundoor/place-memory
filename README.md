@@ -1,105 +1,142 @@
-# place memory
+# place-memory
 
-A personal geospatial memory that turns noisy saved artifacts — screenshots, notes, links, and captions — into grounded real-world places without letting the LLM silently invent identity.
+A small app for turning messy place saves — screenshots, notes, captions, and links — into grounded real-world places.
 
-The project is intentionally narrow: the interesting problem is **reliable entity resolution under incomplete evidence**, not another general chatbot.
+The main constraint is simple: **the model can interpret evidence, but it does not get to declare a place identity by itself.**
 
-## what it does
+## how it works
 
 ```text
-artifact
-  ↓
-Gemini multimodal extraction
-  ↓
-structured place hint + evidence
-  ↓
-provider-neutral place search
-  ↓
-normalized candidates
-  ↓
-deterministic resolver
-  ↓
-resolved / needs_review / unresolved
-  ↓
-persisted memory + provenance
-  ↓
-retrieval + grounded feasibility checks
+saved artifact
+→ Gemini extracts a place hint from visible / provided evidence
+→ a place-search provider returns candidates
+→ candidates are normalized, filtered, enriched, and deduplicated
+→ a deterministic resolver decides:
+   resolved / needs review / unresolved
+→ the decision, candidates, score, gap, and method are stored
 ```
 
-The LLM interprets artifacts. It does **not** establish canonical place identity. Identity is decided by explicit candidate scoring, confidence thresholds, ambiguity checks, and user review when evidence is weak.
+The resolver uses explicit evidence such as name, location, category, candidate separation, and provider-backed aliases. Weak or conflicting evidence goes to review or abstains instead of being silently saved as fact.
 
-## why this is not an LLM wrapper
+## why the resolver is separate from the model
 
-The core engineering work is outside the model call:
+The first version relied too much on fuzzy matching and clean examples. Real tests exposed problems quickly:
 
-- provider-neutral place-search interface
-- normalization into one internal candidate model
-- fuzzy name, location, and category scoring
-- explicit confidence and ambiguity policy
-- abstention instead of fabricated certainty
-- persisted candidate provenance and review state
-- deterministic explanation endpoint for every resolution
-- labeled resolver benchmark used as a CI safety gate
-- agent-facing MCP tools layered over the deterministic system rather than putting an agent in charge of identity
+- a generic "coffee shop" note could produce junk global candidates
+- duplicate OSM records could make one real place look ambiguous
+- missing evidence could still add confidence
+- a manual confirmation could later look like an automatic decision
+- roads and boundaries could survive into place review
+- renamed places could look like weak string matches even when the old name was valid
 
-## current resolver benchmark
+Those failures changed the design.
 
-`python evals/run_resolution_eval.py`
+The current resolver has:
 
-Current deterministic fixture-level results:
+- an explicit no-identity abstention path
+- hard filtering for incompatible entity classes
+- duplicate collapse before ambiguity is measured
+- separate `auto`, `manual`, and `abstained` provenance
+- preserved pre-confirmation score and candidate gap
+- a finite category compatibility table rather than fuzzy category matching
+- independent-evidence requirements for automatic resolution
+- provider-backed alternate / historical names
+- an explanation endpoint that exposes the evidence used for each decision
+
+## one real example
+
+A TikTok screenshot contained a small `STOW LAKE` logo, a San Francisco location tag, and text about renting a pedal boat.
+
+On the first live run, the system retrieved the current `Blue Heron Lake` record but only scored it at `0.6471`, mixed in road objects, and correctly required manual confirmation.
+
+That run exposed three separate issues:
+
+1. `Stow Lake` is a historical name for the current place
+2. "boat rental" described an activity, not the identity type of the lake
+3. road objects should not survive as place candidates
+
+After fixing those issues, the same screenshot was run again. The saved explanation showed:
+
+```text
+canonical place: Blue Heron Lake
+resolution method: auto
+match score: 1.0
+name source: alias:Stow Lake
+location: 1.00
+category: 1.00
+```
+
+The before/after run is documented in [`docs/field-test-2026-09-17.md`](docs/field-test-2026-09-17.md).
+
+## evaluation
+
+I keep controlled resolver tests separate from live product evidence.
+
+### synthetic resolver cases
+
+```bash
+python evals/run_resolution_eval.py
+```
+
+Current fixture results:
 
 | metric | result |
 | --- | ---: |
-| labeled cases | 12 |
-| top-1 accuracy on labeled targets | 75.0% |
-| automatic-resolution precision | 100.0% |
-| recall on cases labeled safe to auto-resolve | 83.3% |
-| false automatic resolution rate | 0.0% |
-| review / abstain rate | 58.3% |
+| cases | 12 |
+| top-1 accuracy on labeled cases | 100% |
+| automatic-resolution precision | 100% |
+| recall on cases labeled safe to auto-resolve | 100% |
+| false automatic resolution rate | 0% |
+| review / abstain rate | 50% |
 
-The benchmark intentionally includes typos, same-name businesses in different cities, chain ambiguity, conflicting category evidence, incomplete names, and missing candidates. CI fails if a benchmark case produces a false automatic resolution.
+### field regression scenarios
 
-These are **resolver-level fixture metrics**, not a claim about real-world end-to-end accuracy. Screenshot extraction and live provider recall are evaluated separately because collapsing them into one number hides where failures occur.
+```bash
+python evals/run_field_resolution_eval.py
+```
 
-## an engineering failure that changed the design
+Current fixture results:
 
-The first no-key POI candidate source was Nominatim/OpenStreetMap. It integrated cleanly and passed request/normalization tests, but live validation against a known real business returned no candidates even with exact-name and address variations.
+| metric | result |
+| --- | ---: |
+| distinct scenarios | 6 |
+| decision-mode accuracy | 100% |
+| top-1 accuracy on labeled cases | 100% |
+| false automatic resolution rate | 0% |
 
-That failure exposed a useful boundary: provider coverage and resolver quality are separate problems. The resolver now depends on a `search_places` capability instead of a concrete vendor, so candidate sources can change without rewriting the confidence policy. Nominatim remains a rate-limited no-key fallback/geocoder, not a claim of production-grade commercial POI coverage.
+These are small regression sets, not a claim about production accuracy. The next evaluation pass is a curated set of real artifacts with stage-level labels for extraction, candidate recall, ranking, decision mode, and false automatic resolution.
 
-See [`docs/provider-evaluation.md`](docs/provider-evaluation.md).
+See [`evals/README.md`](evals/README.md).
 
 ## stack
 
-- **frontend:** React + TypeScript + Vite
-- **API:** Python + FastAPI + Pydantic
-- **multimodal interpretation:** Gemini Developer API
-- **place grounding:** provider-neutral client; Google Places when configured, Nominatim fallback for no-key development
-- **persistence:** SQLite with lightweight schema migration
-- **matching:** RapidFuzz + explicit resolver policy
-- **agent/tool interface:** optional MCP server
-- **testing:** pytest + httpx mock transports + resolver benchmark
-- **CI:** GitHub Actions for API tests, resolver safety eval, MCP import smoke test, and frontend production build
-- **local runtime:** Docker Compose or direct Python/Node processes
+- React + TypeScript + Vite
+- FastAPI + Pydantic
+- Gemini Developer API for text / screenshot interpretation
+- Photon for no-key candidate search
+- Nominatim `/lookup` for OSM alias metadata
+- RapidFuzz + explicit resolver policy
+- SQLite
+- optional MCP adapter
+- pytest + GitHub Actions
+- Docker / Docker Compose
 
-## run locally
+Google Places / Routes remain optional. Routing uses destination coordinates so a Photon/OSM ID is never passed to Google as if it were a Google place ID. Opening-hours lookup only runs when a compatible Google place identity exists; otherwise the result stays unknown.
 
-### fastest: Docker Compose
+## local setup
 
-The repository is runnable without paid infrastructure. Copy the example environment and start both services:
+### Docker Compose
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-Then open `http://localhost:5173`.
+Open `http://localhost:5173`.
 
-Without API keys, text saves still run through the deterministic pipeline using fallback extraction and Nominatim candidate search. Screenshot extraction requires `GEMINI_API_KEY`. Google Places/Routes are optional and only used when `GOOGLE_MAPS_API_KEY` is configured.
+Screenshot extraction requires `GEMINI_API_KEY`. Google credentials are optional.
 
-Never commit `.env`.
-
-### run without Docker
+### direct processes
 
 Backend:
 
@@ -120,68 +157,24 @@ npm ci
 npm run dev
 ```
 
-## zero-cost deployment path
-
-The root `Dockerfile` builds the frontend and API into a single container so the hosted demo does not need cross-origin wiring. `render.yaml` is included as a free-tier deployment blueprint.
-
-The hosted demo intentionally uses ephemeral SQLite storage; it is for evaluation/demo use, not production durability. Screenshot extraction also requires adding `GEMINI_API_KEY` as a host secret. No secret belongs in the repository.
-
-The current repository does not claim an always-on paid deployment. The Docker image is the portable deployment artifact; the optional Terraform directory documents a later GCP boundary without provisioning paid data resources.
-
-## MCP tools
-
-The MCP layer deliberately exposes the grounded system instead of making place identity agentic.
-
-```bash
-cd api
-pip install -r requirements-mcp.txt
-python -m app.mcp_server
-```
-
-Current tools:
-
-- `search_saved_places(query)`
-- `get_place_memory(memory_id)`
-- `explain_place_resolution(memory_id)`
-
-The boundary is intentional: an agent can consume Place Memory as a tool, but the agent cannot bypass the resolver's confidence/review policy.
-
 ## API highlights
 
-- `POST /api/memories/ingest` — extract and resolve a text/link save
-- `POST /api/memories/ingest-image` — multimodal screenshot ingestion
-- `POST /api/memories/{id}/confirm` — confirm one of the stored review candidates
-- `GET /api/memories/{id}/resolution` — inspect policy, scores, gaps, provenance, and candidates
-- `POST /api/feasible` — deterministic `yes / no / uncertain` decision using available routing/hours facts
+- `POST /api/memories/ingest`
+- `POST /api/memories/ingest-image`
+- `POST /api/memories/{id}/confirm`
+- `POST /api/memories/{id}/reject`
+- `GET /api/memories/{id}/resolution`
+- `POST /api/feasible`
 
-## design principles
+## current limits
 
-1. **interpretation is not truth** — model output is evidence, not canonical identity.
-2. **abstention is a feature** — ambiguous places go to review rather than being silently persisted.
-3. **external systems sit behind boundaries** — provider-specific response formats do not leak into resolver logic.
-4. **measure safety, not vibes** — false confident resolution is treated as the highest-cost failure.
-5. **agentic only where it helps** — MCP exposes deterministic capabilities; it does not replace inspectable domain logic.
-6. **preserve failure history** — provider misses and benchmark regressions remain documented instead of being edited out of the story.
+This is still an engineering prototype, not a production service.
 
-## current limitations / next depth layer
+- original screenshot bytes are analyzed but not yet stored with the memory
+- text and screenshot are still separate input modes
+- the real-artifact evaluation set is still small
+- provider recall is not yet measured on a broad enough real set to justify more retrieval infrastructure
+- opening-hours data is unavailable when there is no compatible status-provider identity
+- SQLite is appropriate for the current local single-user version, not multi-user production storage
 
-The current shareable version still has deliberate limits:
-
-- Nominatim is not sufficient as the long-term commercial POI source.
-- the checked-in benchmark measures resolver behavior with labeled candidate fixtures, not full real-world screenshot accuracy.
-- SQLite is appropriate for the current single-user local version; it is not the intended long-term geospatial/search store.
-- Google-backed routing/hours are unavailable without Google credentials, so feasibility safely returns `uncertain` when live facts are missing.
-
-The next technical milestone is an open-data candidate engine using a regional POI corpus, then measuring it against a live provider before deciding whether PostGIS/pg_trgm/pgvector or an additional provider materially improves recall.
-
-## repository map
-
-```text
-api/app/clients/        external model/place clients
-api/app/services/       resolver, retrieval, feasibility policy
-api/app/storage/        persistence
-api/app/mcp_server.py   agent-facing tool adapter
-evals/                  labeled resolver benchmark and results
-web/                    React product surface
-docs/                   architecture and decision history
-```
+The next pass is **unified evidence input + original screenshot persistence**, while expanding the real-artifact evaluation set in parallel.

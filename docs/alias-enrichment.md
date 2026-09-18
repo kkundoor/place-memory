@@ -2,20 +2,47 @@
 
 ## problem
 
-A saved artifact may contain a valid historical or alternate name while the search provider returns the current canonical name. Pure edit-distance ranking treats that as a weak name match even when both names refer to the same real entity.
+Search providers may return a current canonical name while the saved artifact contains a valid historical or alternate name.
 
-The first live screenshot exposed this with `Stow Lake` in the artifact and `Blue Heron Lake` in current candidate data.
+For example:
 
-## design
+```text
+artifact: Stow Lake
+current provider name: Blue Heron Lake
+```
 
-Candidate generation remains Photon-first. For returned OSM objects, a metadata adapter may look up alternate names using the stable OSM object ID. The resolver then compares the artifact name against both the canonical name and provider-backed aliases.
+Pure edit distance treats those as a weak name match even though they refer to the same place.
 
-Alias evidence does not bypass the safety policy. Automatic resolution still requires independent corroboration such as structured location/category evidence and candidate separation.
+## current approach
 
-## current metadata source
+Photon remains the candidate-search provider for the no-key path.
 
-The local/demo path uses Nominatim's `/lookup` endpoint with `namedetails=1`, which can return language variants, alternate names, and older names. Requests are batched, cached in memory, carry an identifying User-Agent, and share the client's one-request-per-second limiter.
+For returned OSM objects, a small enrichment adapter uses the stable OSM object ID to request name metadata from Nominatim `/lookup`. The resolver then compares the artifact name against:
 
-Alias enrichment is deliberately non-fatal: if the metadata lookup is unavailable, Photon candidates still flow into the resolver unchanged.
+- the canonical name
+- explicit historical / alternate names
+- language-qualified place names
 
-The public Nominatim service is not a production dependency. A scaled deployment should replace this adapter with a self-hosted/open-data index or another provider while keeping the same enrichment boundary.
+The alias metadata is optional. If lookup fails, the Photon candidates still continue through the resolver unchanged.
+
+## accepted alias metadata
+
+The parser accepts explicit name-history fields such as:
+
+- `old_name`
+- `alt_name`
+- `loc_name`
+- `short_name`
+- `official_name`
+
+It also accepts language-qualified keys such as `name:es`.
+
+It does **not** treat arbitrary `name:*` metadata as an alias. In particular, etymology metadata such as `name:etymology` or `name:etymology:wikidata` is not identity evidence.
+
+## safety
+
+An alias match strengthens the name signal; it does not bypass the rest of the policy.
+
+Automatic resolution still requires independent evidence and enough separation from other candidates.
+
+There is also a controlled alias-collision test: if two different candidates share the same alias and otherwise look equally plausible, both receive the strong alias name signal and the normal ambiguity rule keeps the result in review.
