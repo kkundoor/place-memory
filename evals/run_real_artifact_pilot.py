@@ -28,8 +28,19 @@ def evaluate_case(case, payload):
 
     expected_mode = case.get('expected_mode')
     mode = observed_mode(memory)
+    extraction_labeled = 'expected_extraction_name' in case
     expected_extract = case.get('expected_extraction_name')
     extracted = (memory.get('hint') or {}).get('name')
+
+    if not extraction_labeled:
+        extraction_correct = None
+    elif expected_extract is None:
+        extraction_correct = extracted is None
+    else:
+        extraction_correct = (
+            (extracted or '').casefold()
+            == expected_extract.casefold()
+        )
 
     return {
         'case': case['case'],
@@ -39,7 +50,7 @@ def evaluate_case(case, payload):
         'mode_correct': None if expected_mode is None else mode == expected_mode,
         'expected_extraction_name': expected_extract,
         'extracted_name': extracted,
-        'extraction_correct': None if expected_extract is None else (extracted or '').casefold() == expected_extract.casefold(),
+        'extraction_correct': extraction_correct,
         'correct_candidate_seen': None if not expected_names else rank is not None,
         'correct_candidate_rank': rank,
         'false_auto': mode == 'auto' and expected_mode not in (None, 'auto'),
@@ -61,16 +72,24 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--manifest', default='artifacts/real-pilot/manifest.json')
     parser.add_argument('--api', default='http://localhost:8000')
+    parser.add_argument(
+        '--case',
+        action='append',
+        dest='case_names',
+        help='run only the named case; may be supplied more than once',
+    )
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
-    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8-sig'))
     base_dir = manifest_path.parent
 
     rows = []
     with httpx.Client(timeout=60) as client:
         for case in manifest['cases']:
             if case.get('skip'):
+                continue
+            if args.case_names and case['case'] not in args.case_names:
                 continue
 
             artifact = case.get('artifact_path')
