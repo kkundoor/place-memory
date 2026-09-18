@@ -1,7 +1,13 @@
 import asyncio
+import logging
+import time
 
 from app.config import Settings
 from app.models import PlaceHint
+
+
+logger = logging.getLogger('place_memory.gemini')
+_RETRY_DELAYS_SECONDS = (0.5, 1.0)
 
 
 class GeminiExtractor:
@@ -55,23 +61,40 @@ class GeminiExtractor:
         from google.genai import errors
         from google.genai import types
 
-        client = genai.Client(api_key=self.api_key)
-        try:
-            response = client.models.generate_content(
-                model=self.model,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    temperature=0,
-                    response_mime_type='application/json',
-                    response_schema=PlaceHint,
-                ),
-            )
-            parsed = response.parsed
-            return parsed if isinstance(parsed, PlaceHint) else PlaceHint.model_validate(parsed)
-        except errors.APIError as exc:
-            raise RuntimeError('gemini request failed; retry shortly') from exc
-        finally:
-            client.close()
+        for attempt in range(len(_RETRY_DELAYS_SECONDS) + 1):
+            client = genai.Client(api_key=self.api_key)
+            try:
+                response = client.models.generate_content(
+                    model=self.model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        temperature=0,
+                        response_mime_type='application/json',
+                        response_schema=PlaceHint,
+                    ),
+                )
+                parsed = response.parsed
+                return parsed if isinstance(parsed, PlaceHint) else PlaceHint.model_validate(parsed)
+            except errors.APIError as exc:
+                code = getattr(exc, 'code', None)
+                retryable = (
+                    code in {408, 425, 429}
+                    or (isinstance(code, int) and code >= 500)
+                )
+
+                if not retryable or attempt >= len(_RETRY_DELAYS_SECONDS):
+                    raise RuntimeError('gemini request failed; retry shortly') from exc
+
+                delay = _RETRY_DELAYS_SECONDS[attempt]
+                logger.warning(
+                    'gemini_request_retry code=%s attempt=%s delay=%s',
+                    code,
+                    attempt + 1,
+                    delay,
+                )
+                time.sleep(delay)
+            finally:
+                client.close()
 
     @staticmethod
     def _instruction(source: str) -> str:
