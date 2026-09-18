@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_env: str = 'local'
     database_path: str = 'place_memory.db'
+    upload_dir: str = 'uploads'
     google_maps_api_key: str = ''
     gemini_api_key: str = ''
     gemini_model: str = 'gemini-3.6-flash'

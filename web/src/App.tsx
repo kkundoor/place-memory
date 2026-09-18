@@ -14,11 +14,8 @@ import {
 import type { FeasibleMemory, Memory, PlaceCandidate } from './types';
 import './styles.css';
 
-type SaveMode = 'note' | 'screenshot';
-
 export default function App() {
   const [memories, setMemories] = useState<Memory[]>([]);
-  const [saveMode, setSaveMode] = useState<SaveMode>('note');
   const [sourceText, setSourceText] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [image, setImage] = useState<File | null>(null);
@@ -51,23 +48,27 @@ export default function App() {
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (saveMode === 'note' && !sourceText.trim()) return;
-    if (saveMode === 'screenshot' && !image) return;
+    const context = sourceText.trim();
+    if (!context && !image) return;
 
     setBusy(true);
-    setSaveMessage(saveMode === 'screenshot' ? 'Analyzing screenshot…' : 'Resolving place…');
+    setSaveMessage(image ? 'Analyzing screenshot…' : 'Resolving place…');
+
     try {
-      const response = saveMode === 'screenshot' && image
-        ? await ingestImage(image, sourceUrl.trim())
-        : await ingestMemory(sourceText.trim(), sourceUrl.trim());
+      const response = image
+        ? await ingestImage(image, sourceUrl.trim(), context)
+        : await ingestMemory(context, sourceUrl.trim());
+
       setSourceText('');
       setSourceUrl('');
       setImage(null);
+
       const statusMessage = {
         resolved: 'Place identified and saved.',
         needs_review: 'Saved — choose the right match below.',
         unresolved: "Saved, but I couldn't identify the place yet.",
       }[response.memory.resolution_status];
+
       setSaveMessage(response.warning || statusMessage);
       await refresh();
     } catch (error) {
@@ -132,6 +133,8 @@ export default function App() {
     }, () => setNowMessage('Location permission is needed for this check.'));
   }
 
+  const canSave = Boolean(sourceText.trim() || image);
+
   return (
     <main>
       <header>
@@ -146,56 +149,37 @@ export default function App() {
         <div className="panel-heading">
           <div>
             <h2>add a save</h2>
-            <p>Paste a note or upload the screenshot you actually saved.</p>
+            <p>Add whatever you have. Text and screenshots can work together.</p>
           </div>
         </div>
 
-        <div className="mode-switch" role="tablist" aria-label="Save type">
-          <button
-            type="button"
-            className={saveMode === 'note' ? 'mode active' : 'mode'}
-            onClick={() => setSaveMode('note')}
-          >
-            Text / note
-          </button>
-          <button
-            type="button"
-            className={saveMode === 'screenshot' ? 'mode active' : 'mode'}
-            onClick={() => setSaveMode('screenshot')}
-          >
-            Screenshot
-          </button>
-        </div>
-
         <form onSubmit={save}>
-          {saveMode === 'note' ? (
-            <label className="field">
-              <span>What did you save?</span>
-              <textarea
-                value={sourceText}
-                onChange={(event) => setSourceText(event.target.value)}
-                placeholder="e.g. Zingerman's Deli in Ann Arbor — want to try the sandwiches"
-              />
-            </label>
-          ) : (
-            <label className={`upload-box ${image ? 'has-file' : ''}`}>
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(event) => setImage(event.target.files?.[0] || null)}
-              />
-              {imagePreview ? (
-                <img className="upload-preview" src={imagePreview} alt="Selected screenshot preview" />
-              ) : (
-                <span className="upload-icon" aria-hidden="true">↑</span>
-              )}
-              <strong>{image ? image.name : 'Upload a screenshot'}</strong>
-              <span>{image ? 'Click to choose a different image' : 'PNG, JPG, or WebP · up to 8 MB'}</span>
-            </label>
-          )}
+          <label className="field">
+            <span>What did you save? <em>optional if you attach a screenshot</em></span>
+            <textarea
+              value={sourceText}
+              onChange={(event) => setSourceText(event.target.value)}
+              placeholder="e.g. friend said this is in Golden Gate Park — want to rent a pedal boat"
+            />
+          </label>
+
+          <label className={`upload-box compact ${image ? 'has-file' : ''}`}>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(event) => setImage(event.target.files?.[0] || null)}
+            />
+            {imagePreview ? (
+              <img className="upload-preview" src={imagePreview} alt="Selected screenshot preview" />
+            ) : (
+              <span className="upload-icon" aria-hidden="true">↑</span>
+            )}
+            <strong>{image ? image.name : 'Attach screenshot'}</strong>
+            <span>{image ? 'Click to choose a different image' : 'PNG, JPG, or WebP · up to 8 MB'}</span>
+          </label>
 
           <label className="field">
-            <span>Source link <em>optional</em></span>
+            <span>Source link <em>optional metadata</em></span>
             <input
               value={sourceUrl}
               onChange={(event) => setSourceUrl(event.target.value)}
@@ -203,10 +187,11 @@ export default function App() {
             />
           </label>
 
-          <button type="submit" disabled={busy || (saveMode === 'note' ? !sourceText.trim() : !image)}>
-            {busy ? 'Working…' : saveMode === 'screenshot' ? 'Analyze screenshot' : 'Save + resolve'}
+          <button type="submit" disabled={busy || !canSave}>
+            {busy ? 'Working…' : 'Save + identify'}
           </button>
         </form>
+
         {saveMessage && <p className="message save-message">{saveMessage}</p>}
       </section>
 
@@ -218,6 +203,7 @@ export default function App() {
           </div>
           <span className="count">{memories.length}</span>
         </div>
+
         {memories.length === 0 ? (
           <div className="empty-state">Your resolved and unresolved saves will appear here.</div>
         ) : (
@@ -242,6 +228,7 @@ export default function App() {
             <p>Use your current location and available time to filter resolved saves.</p>
           </div>
         </div>
+
         <div className="query-row">
           <label className="field query-field">
             <span>Question</span>
@@ -260,8 +247,10 @@ export default function App() {
           </label>
           <button onClick={checkNow}>Find doable saves</button>
         </div>
+
         {nowMessage && <p className="message">{nowMessage}</p>}
         {mapImage && <img className="map" src={mapImage} alt="Saved places near the current location" />}
+
         <div className="results">
           {results.map((result) => (
             <article className="result-card" key={result.memory.id}>

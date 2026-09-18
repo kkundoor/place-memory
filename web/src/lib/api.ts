@@ -36,16 +36,29 @@ export async function ingestMemory(sourceText: string, sourceUrl: string): Promi
   return response.json();
 }
 
-export async function ingestImage(file: File, sourceUrl: string): Promise<IngestResponse> {
+export async function ingestImage(
+  file: File,
+  sourceUrl: string,
+  context: string,
+): Promise<IngestResponse> {
   const body = new FormData();
   body.append('image', file);
   if (sourceUrl) body.append('source_url', sourceUrl);
-  const response = await fetch(`${base}/api/memories/ingest-image`, { method: 'POST', body });
+  if (context) body.append('note', context);
+
+  const response = await fetch(`${base}/api/memories/ingest-image`, {
+    method: 'POST',
+    body,
+  });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.detail || 'could not ingest image');
   }
   return response.json();
+}
+
+export function sourceImageUrl(memoryId: string): string {
+  return `${base}/api/memories/${memoryId}/source-image`;
 }
 
 export async function confirmMemory(memory: Memory, candidate: PlaceCandidate): Promise<Memory> {

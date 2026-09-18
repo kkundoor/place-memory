@@ -1,3 +1,4 @@
+import { sourceImageUrl } from '../lib/api';
 import type { Memory, PlaceCandidate } from '../types';
 
 const statusLabel = {
@@ -33,6 +34,14 @@ export function MemoryCard({
         <span className="source">{memory.source_type}</span>
       </div>
 
+      {memory.source_asset_key && (
+        <img
+          className="memory-source-image"
+          src={sourceImageUrl(memory.id)}
+          alt="Original saved screenshot"
+        />
+      )}
+
       <h3>{title}</h3>
       {displayPlace?.formatted_address && <p>{displayPlace.formatted_address}</p>}
 
@@ -42,6 +51,13 @@ export function MemoryCard({
           {memory.resolution_method === 'manual' ? 'confirmed by you' : 'auto-resolved'}
           {' · '}source {displayPlace.provider}
         </p>
+      )}
+
+      {memory.note && (
+        <div className="source-context">
+          <strong>Your context</strong>
+          <span>{memory.note}</span>
+        </div>
       )}
 
       {unresolvedWithoutName && (

@@ -18,14 +18,31 @@ class GeminiExtractor:
             return self._fallback(text)
         return await asyncio.to_thread(self._generate, [self._instruction(text)])
 
-    async def extract_image(self, data: bytes, mime_type: str, source_url: str | None = None) -> PlaceHint:
+    async def extract_image(
+        self,
+        data: bytes,
+        mime_type: str,
+        source_url: str | None = None,
+        context: str | None = None,
+    ) -> PlaceHint:
         if not self.enabled:
             raise RuntimeError('gemini api is not configured')
 
         from google.genai import types
 
-        prompt = self._instruction(
-            f'source url: {source_url}' if source_url else 'no source url provided'
+        source_parts = [
+            f'source url: {source_url}' if source_url else 'no source url provided',
+        ]
+        if context:
+            source_parts.append(
+                'User-provided context (this may not be visible in the image): '
+                f'{context}'
+            )
+
+        prompt = self._instruction('\n'.join(source_parts))
+        prompt += (
+            '\nFor image inputs, keep visual evidence separate from user-provided context. '
+            'Context may support extraction, but do not claim it was visible in the image.'
         )
         parts = [
             prompt,

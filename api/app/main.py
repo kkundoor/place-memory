@@ -30,6 +30,7 @@ from app.models import (
 from app.services.feasibility import check_memories
 from app.services.resolver import explain_resolution, resolution_metrics, resolve_hint
 from app.services.retrieval import search_memories
+from app.storage.assets import LocalAssetStore
 from app.storage.sqlite import MemoryStore
 
 
@@ -37,6 +38,7 @@ logger = logging.getLogger('place_memory.api')
 
 settings = get_settings()
 store = MemoryStore(settings.database_path)
+asset_store = LocalAssetStore(settings.upload_dir)
 maps = GoogleMapsClient(settings.google_maps_api_key)
 photon = PhotonClient(settings.photon_base_url, settings.photon_user_agent)
 nominatim = NominatimClient(settings.nominatim_base_url, settings.nominatim_user_agent)
@@ -44,7 +46,7 @@ photon_with_aliases = AliasEnrichedPlaceSearchClient(photon, nominatim)
 place_search = maps if maps.enabled else photon_with_aliases if photon.enabled else nominatim
 extractor = GeminiExtractor(settings)
 
-app = FastAPI(title='place memory api', version='0.3.0')
+app = FastAPI(title='place memory api', version='0.4.0')
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.web_origin],
@@ -99,10 +101,28 @@ def list_memories(q: str = '') -> list[Memory]:
     return search_memories(memories, q) if q else memories
 
 
+@app.get('/api/memories/{memory_id}/source-image')
+def source_image(memory_id: str) -> Response:
+    memory = store.get(memory_id)
+    if not memory or not memory.source_asset_key or not memory.source_asset_mime_type:
+        raise HTTPException(status_code=404, detail='source image not found')
+    try:
+        data = asset_store.read(memory.source_asset_key)
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(status_code=404, detail='source image not found')
+    return Response(content=data, media_type=memory.source_asset_mime_type)
+
+
 @app.delete('/api/memories/{memory_id}', status_code=204)
 def delete_memory(memory_id: str) -> Response:
-    if not store.delete(memory_id):
+    memory = store.get(memory_id)
+    if not memory:
         raise HTTPException(status_code=404, detail='memory not found')
+
+    if memory.source_asset_key:
+        asset_store.delete(memory.source_asset_key)
+
+    store.delete(memory_id)
     return Response(status_code=204)
 
 
@@ -152,6 +172,7 @@ async def ingest_memory(data: MemoryCreate) -> dict:
         logger.exception('place_search_failed memory_id=%s', memory.id)
         updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
         return {'memory': updated, 'candidates': [], 'warning': 'place search is temporarily unavailable'}
+
     updated = _persist_resolution(memory.id, hint, status, selected, candidates)
     return {'memory': updated, 'candidates': candidates}
 
@@ -164,12 +185,18 @@ async def ingest_image(
 ) -> dict:
     if image.content_type not in {'image/jpeg', 'image/png', 'image/webp'}:
         raise HTTPException(status_code=415, detail='jpeg, png, or webp required')
+
     data = await image.read()
     if len(data) > 8 * 1024 * 1024:
         raise HTTPException(status_code=413, detail='image must be under 8 MB')
 
+    context = note.strip() if note and note.strip() else None
+
     try:
-        hint = await extractor.extract_image(data, image.content_type, source_url)
+        if context:
+            hint = await extractor.extract_image(data, image.content_type, source_url, context)
+        else:
+            hint = await extractor.extract_image(data, image.content_type, source_url)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -177,9 +204,27 @@ async def ingest_image(
         source_type=SourceType.screenshot,
         source_text=hint.evidence or hint.name or 'screenshot',
         source_url=source_url,
-        note=note,
+        note=context,
         hint=hint,
     ))
+
+    key = None
+    try:
+        key = asset_store.save(memory.id, data, image.content_type)
+        attached = store.attach_asset(memory.id, key, image.content_type)
+        if not attached:
+            raise RuntimeError('memory disappeared before asset attachment')
+        memory = attached
+    except Exception as exc:
+        if key:
+            try:
+                asset_store.delete(key)
+            except Exception:
+                logger.exception('asset_cleanup_failed memory_id=%s', memory.id)
+        store.delete(memory.id)
+        logger.exception('asset_persist_failed memory_id=%s', memory.id)
+        raise HTTPException(status_code=500, detail='could not persist source image') from exc
+
     if not place_search.enabled:
         updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
         return {'memory': updated, 'candidates': [], 'warning': 'place search is not configured'}
@@ -190,6 +235,7 @@ async def ingest_image(
         logger.exception('place_search_failed memory_id=%s', memory.id)
         updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
         return {'memory': updated, 'candidates': [], 'warning': 'place search is temporarily unavailable'}
+
     updated = _persist_resolution(memory.id, hint, status, selected, candidates)
     return {'memory': updated, 'candidates': candidates}
 

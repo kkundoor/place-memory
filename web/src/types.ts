@@ -28,6 +28,8 @@ export type Memory = {
   source_text: string;
   source_url?: string | null;
   note?: string | null;
+  source_asset_key?: string | null;
+  source_asset_mime_type?: string | null;
   resolution_status: 'unresolved' | 'resolved' | 'needs_review';
   resolution_method?: 'auto' | 'manual' | 'abstained' | null;
   pre_resolution_confidence?: number | null;

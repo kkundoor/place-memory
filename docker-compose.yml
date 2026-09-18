@@ -1,9 +1,10 @@
-services:
+﻿services:
   api:
     build: ./api
     environment:
       APP_ENV: local
       DATABASE_PATH: /data/place_memory.db
+      UPLOAD_DIR: /data/uploads
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}

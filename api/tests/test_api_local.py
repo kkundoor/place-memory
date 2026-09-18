@@ -1,7 +1,8 @@
-import pytest
+﻿import pytest
 from fastapi.testclient import TestClient
 
 from app import main
+from app.storage.assets import LocalAssetStore
 from app.storage.sqlite import MemoryStore
 
 
@@ -14,6 +15,7 @@ def client(tmp_path, monkeypatch):
             return []
 
     monkeypatch.setattr(main, 'store', MemoryStore(str(tmp_path / 'test.db')))
+    monkeypatch.setattr(main, 'asset_store', LocalAssetStore(str(tmp_path / 'uploads')))
     monkeypatch.setattr(main, 'place_search', DisabledPlaceSearch())
     return TestClient(main.app)
 
@@ -21,9 +23,9 @@ def client(tmp_path, monkeypatch):
 def test_local_ingest_review_confirm_and_query(client):
     response = client.post('/api/memories/ingest', json={
         'source_type': 'note',
-        'source_text': 'Carissa’s Bakery in East Hampton',
+        'source_text': 'Carissaâ€™s Bakery in East Hampton',
         'hint': {
-            'name': 'Carissa’s Bakery',
+            'name': 'Carissaâ€™s Bakery',
             'city_hint': 'East Hampton',
             'category_hint': 'bakery',
         },
@@ -37,7 +39,7 @@ def test_local_ingest_review_confirm_and_query(client):
     memory_id = payload['memory']['id']
     confirm = client.post(f'/api/memories/{memory_id}/confirm', json={
         'place_id': 'place-1',
-        'name': 'Carissa’s Bakery',
+        'name': 'Carissaâ€™s Bakery',
         'formatted_address': 'East Hampton, NY',
         'latitude': 40.96,
         'longitude': -72.18,
@@ -55,7 +57,7 @@ def test_local_ingest_review_confirm_and_query(client):
     query = client.get('/api/memories', params={'q': 'bakery'})
 
     assert query.status_code == 200
-    assert [item['place']['name'] for item in query.json()] == ['Carissa’s Bakery']
+    assert [item['place']['name'] for item in query.json()] == ['Carissaâ€™s Bakery']
 
 
 def test_local_feasibility_is_uncertain_without_live_maps(client):
@@ -275,14 +277,14 @@ def test_delete_memory_removes_saved_data(client):
 
 def test_unicode_survives_api_serialization(client):
     create = client.post('/api/memories', json={
-        'source_text': "saved Zingerman's Next Door Café in Quindío",
-        'hint': {'name': "Zingerman's Next Door Café", 'city_hint': 'Quindío'},
+        'source_text': "saved Zingerman's Next Door CafÃ© in QuindÃ­o",
+        'hint': {'name': "Zingerman's Next Door CafÃ©", 'city_hint': 'QuindÃ­o'},
     })
     assert create.status_code == 200
     body = client.get('/api/memories').json()[0]
-    assert body['source_text'] == "saved Zingerman's Next Door Café in Quindío"
-    assert body['hint']['name'] == "Zingerman's Next Door Café"
-    assert body['hint']['city_hint'] == 'Quindío'
+    assert body['source_text'] == "saved Zingerman's Next Door CafÃ© in QuindÃ­o"
+    assert body['hint']['name'] == "Zingerman's Next Door CafÃ©"
+    assert body['hint']['city_hint'] == 'QuindÃ­o'
 
 
 def test_reject_candidates_marks_memory_abstained(client, monkeypatch):
@@ -339,7 +341,7 @@ def test_resolution_explanation_exposes_policy_and_candidate_reasons(client, mon
             return [
                 RawPlace(
                     place_id='known-place',
-                    name='Carissa’s Bakery',
+                    name='Carissaâ€™s Bakery',
                     formatted_address='East Hampton, NY',
                     latitude=40.96,
                     longitude=-72.18,
@@ -352,9 +354,9 @@ def test_resolution_explanation_exposes_policy_and_candidate_reasons(client, mon
 
     monkeypatch.setattr(main, 'place_search', Search())
     ingest = client.post('/api/memories/ingest', json={
-        'source_text': 'Carissa’s Bakery in East Hampton',
+        'source_text': 'Carissaâ€™s Bakery in East Hampton',
         'hint': {
-            'name': 'Carissa’s Bakery',
+            'name': 'Carissaâ€™s Bakery',
             'city_hint': 'East Hampton',
             'category_hint': 'bakery',
         },

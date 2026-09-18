@@ -37,6 +37,8 @@ class MemoryStore:
                     source_text text not null,
                     source_url text,
                     note text,
+                    source_asset_key text,
+                    source_asset_mime_type text,
                     created_at text not null,
                     resolution_status text not null,
                     resolution_method text,
@@ -49,14 +51,17 @@ class MemoryStore:
                 '''
             )
             columns = {row['name'] for row in conn.execute('pragma table_info(memories)').fetchall()}
-            if 'candidates_json' not in columns:
-                conn.execute('alter table memories add column candidates_json text')
-            if 'resolution_method' not in columns:
-                conn.execute('alter table memories add column resolution_method text')
-            if 'pre_resolution_confidence' not in columns:
-                conn.execute('alter table memories add column pre_resolution_confidence real')
-            if 'pre_resolution_gap' not in columns:
-                conn.execute('alter table memories add column pre_resolution_gap real')
+            migrations = {
+                'candidates_json': 'text',
+                'resolution_method': 'text',
+                'pre_resolution_confidence': 'real',
+                'pre_resolution_gap': 'real',
+                'source_asset_key': 'text',
+                'source_asset_mime_type': 'text',
+            }
+            for column, kind in migrations.items():
+                if column not in columns:
+                    conn.execute(f'alter table memories add column {column} {kind}')
 
     def create(self, data: MemoryCreate) -> Memory:
         memory = Memory(
@@ -86,6 +91,17 @@ class MemoryStore:
         with self._connect() as conn:
             cursor = conn.execute('delete from memories where id = ?', (memory_id,))
         return cursor.rowcount > 0
+
+    def attach_asset(self, memory_id: str, key: str, mime_type: str) -> Memory | None:
+        memory = self.get(memory_id)
+        if not memory:
+            return None
+        updated = memory.model_copy(update={
+            'source_asset_key': key,
+            'source_asset_mime_type': mime_type,
+        })
+        self._write(updated)
+        return updated
 
     def update_resolution(
         self,
@@ -121,11 +137,12 @@ class MemoryStore:
             conn.execute(
                 '''
                 insert or replace into memories (
-                    id, source_type, source_text, source_url, note, created_at,
-                    resolution_status, resolution_method,
+                    id, source_type, source_text, source_url, note,
+                    source_asset_key, source_asset_mime_type,
+                    created_at, resolution_status, resolution_method,
                     pre_resolution_confidence, pre_resolution_gap,
                     hint_json, place_json, candidates_json
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''',
                 (
                     memory.id,
@@ -133,6 +150,8 @@ class MemoryStore:
                     memory.source_text,
                     memory.source_url,
                     memory.note,
+                    memory.source_asset_key,
+                    memory.source_asset_mime_type,
                     memory.created_at.isoformat(),
                     memory.resolution_status.value,
                     memory.resolution_method.value if memory.resolution_method else None,
@@ -155,6 +174,8 @@ class MemoryStore:
             source_text=row['source_text'],
             source_url=row['source_url'],
             note=row['note'],
+            source_asset_key=row['source_asset_key'],
+            source_asset_mime_type=row['source_asset_mime_type'],
             created_at=datetime.fromisoformat(row['created_at']),
             resolution_status=ResolutionStatus(row['resolution_status']),
             resolution_method=ResolutionMethod(row['resolution_method']) if row['resolution_method'] else None,

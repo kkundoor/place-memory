@@ -61,6 +61,8 @@ class Memory(BaseModel):
     source_text: str
     source_url: str | None = None
     note: str | None = None
+    source_asset_key: str | None = None
+    source_asset_mime_type: str | None = None
     created_at: datetime
     resolution_status: ResolutionStatus
     resolution_method: ResolutionMethod | None = None
