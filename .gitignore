@@ -1,4 +1,4 @@
-# python
+﻿# python
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -30,3 +30,4 @@ artifacts/field-tests/
 *.tfstate.*
 .terraform.lock.hcl
 *.tsbuildinfo
+artifacts/real-pilot/
