@@ -13,6 +13,10 @@ _LANGUAGE_NAME_KEY = re.compile(
     r'^name:[a-z]{2,3}(?:[-_][a-z0-9]{2,8})*$',
     re.IGNORECASE,
 )
+_LANGUAGE_ALIAS_SUFFIX = re.compile(
+    r'^[a-z]{2,3}(?:[-_][a-z0-9]{2,8})*$',
+    re.IGNORECASE,
+)
 
 
 class NominatimClient:
@@ -122,8 +126,11 @@ class NominatimClient:
         for key, value in namedetails.items():
             key_text = str(key).lower()
             is_language_name = bool(_LANGUAGE_NAME_KEY.fullmatch(key_text))
-            is_alias_key = any(
-                key_text == item or key_text.startswith(f'{item}:')
+            is_alias_key = key_text in _ALIAS_KEYS or any(
+                key_text.startswith(f'{item}:')
+                and _LANGUAGE_ALIAS_SUFFIX.fullmatch(
+                    key_text[len(item) + 1:]
+                )
                 for item in _ALIAS_KEYS
             )
             if not (is_language_name or is_alias_key):
