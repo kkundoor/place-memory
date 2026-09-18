@@ -129,7 +129,7 @@ class GoogleMapsClient:
             response.raise_for_status()
             return response.content
 
-    async def route(self, origin: Origin, place_id: str) -> RouteInfo:
+    async def route(self, origin: Origin, destination: Origin) -> RouteInfo:
         if not self.enabled:
             return RouteInfo(duration_seconds=None, distance_meters=None)
 
@@ -143,7 +143,10 @@ class GoogleMapsClient:
                 'latitude': origin.latitude,
                 'longitude': origin.longitude,
             }}},
-            'destination': {'placeId': place_id},
+            'destination': {'location': {'latLng': {
+                'latitude': destination.latitude,
+                'longitude': destination.longitude,
+            }}},
             'travelMode': 'DRIVE',
             'routingPreference': 'TRAFFIC_AWARE',
         }

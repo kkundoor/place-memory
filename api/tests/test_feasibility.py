@@ -19,13 +19,17 @@ class FakeMaps:
             raise RuntimeError('places unavailable')
         return PlaceStatus(open_now=self.open_now)
 
-    async def route(self, origin, place_id):
+    async def route(self, origin, destination):
         if self.route_error:
             raise RuntimeError('routes unavailable')
         return RouteInfo(duration_seconds=self.seconds, distance_meters=5000)
 
 
-def saved_place() -> Memory:
+def saved_place(
+    place_id: str = 'place-1',
+    latitude: float = 40,
+    longitude: float = -72,
+) -> Memory:
     return Memory(
         id='1',
         source_type=SourceType.note,
@@ -33,10 +37,12 @@ def saved_place() -> Memory:
         created_at=datetime.now(timezone.utc),
         resolution_status=ResolutionStatus.resolved,
         place=PlaceCandidate(
-            place_id='place-1',
+            place_id=place_id,
+            provider='google',
+            provider_place_id=place_id,
             name='Lunch',
-            latitude=40,
-            longitude=-72,
+            latitude=latitude,
+            longitude=longitude,
             confidence=0.9,
         ),
     )
@@ -101,8 +107,62 @@ async def test_hours_failure_returns_uncertain_with_route_evidence():
 
 
 @pytest.mark.asyncio
+async def test_non_google_place_routes_by_coordinates_without_foreign_status_lookup():
+    class RecordingMaps:
+        def __init__(self):
+            self.status_calls = []
+            self.route_calls = []
+
+        async def get_status(self, place_id):
+            self.status_calls.append(place_id)
+            return PlaceStatus(open_now=True)
+
+        async def route(self, origin, destination):
+            self.route_calls.append((origin, destination))
+            return RouteInfo(duration_seconds=600, distance_meters=5000)
+
+    maps = RecordingMaps()
+    memory = saved_place(
+        place_id='photon:R:12908',
+        latitude=37.7689904,
+        longitude=-122.4728548,
+    )
+    memory.place.provider = 'photon'
+    memory.place.provider_place_id = 'R:12908'
+
+    result = await check_memory(
+        memory,
+        Origin(latitude=37.77, longitude=-122.45),
+        available_minutes=90,
+        visit_minutes=45,
+        maps=maps,
+    )
+
+    assert maps.status_calls == []
+    assert len(maps.route_calls) == 1
+    _, destination = maps.route_calls[0]
+    assert destination == Origin(latitude=37.7689904, longitude=-122.4728548)
+    assert result.travel_minutes == 10
+    assert result.status == 'uncertain'
+    assert 'live opening status unavailable' in result.reasons
+
+
+@pytest.mark.asyncio
 async def test_batch_checks_sort_yes_before_uncertain_before_no():
     from app.services.feasibility import check_memories
+
+    coordinates = {
+        'closed': 40.01,
+        'unknown': 40.02,
+        'far': 40.03,
+        'near': 40.04,
+    }
+    seconds_by_latitude = {
+        40.01: 300,
+        40.02: 600,
+        40.03: 1200,
+        40.04: 300,
+    }
 
     class MixedMaps:
         async def get_status(self, place_id):
@@ -112,15 +172,20 @@ async def test_batch_checks_sort_yes_before_uncertain_before_no():
                 return PlaceStatus(open_now=None)
             return PlaceStatus(open_now=True)
 
-        async def route(self, origin, place_id):
-            seconds = {'near': 300, 'far': 1200, 'unknown': 600, 'closed': 300}[place_id]
-            return RouteInfo(duration_seconds=seconds, distance_meters=5000)
+        async def route(self, origin, destination):
+            return RouteInfo(
+                duration_seconds=seconds_by_latitude[destination.latitude],
+                distance_meters=5000,
+            )
 
     memories = []
     for place_id in ['closed', 'unknown', 'far', 'near']:
-        item = saved_place().model_copy(deep=True)
+        item = saved_place(
+            place_id=place_id,
+            latitude=coordinates[place_id],
+            longitude=-72,
+        )
         item.id = place_id
-        item.place.place_id = place_id
         item.place.name = place_id
         memories.append(item)
 

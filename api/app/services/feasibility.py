@@ -1,8 +1,18 @@
 import asyncio
 import math
 
-from app.clients.google_maps import GoogleMapsClient
+from app.clients.google_maps import GoogleMapsClient, PlaceStatus
 from app.models import FeasibleMemory, Memory, Origin
+
+
+async def _unknown_status() -> PlaceStatus:
+    return PlaceStatus(open_now=None)
+
+
+def _google_status_place_id(memory: Memory) -> str | None:
+    if not memory.place or memory.place.provider != 'google':
+        return None
+    return memory.place.provider_place_id or memory.place.place_id
 
 
 async def check_memory(
@@ -15,9 +25,18 @@ async def check_memory(
     if not memory.place:
         return FeasibleMemory(memory=memory, status='uncertain', reasons=['place is unresolved'])
 
+    destination = Origin(
+        latitude=memory.place.latitude,
+        longitude=memory.place.longitude,
+    )
+    status_place_id = _google_status_place_id(memory)
+
+    status_call = maps.get_status(status_place_id) if status_place_id else _unknown_status()
+    route_call = maps.route(origin, destination)
+
     status_result, route_result = await asyncio.gather(
-        maps.get_status(memory.place.place_id),
-        maps.route(origin, memory.place.place_id),
+        status_call,
+        route_call,
         return_exceptions=True,
     )
 

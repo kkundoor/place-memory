@@ -34,14 +34,20 @@ def get_place_memory(memory_id: str) -> dict | None:
 
 @mcp.tool()
 def explain_place_resolution(memory_id: str) -> dict:
-    """Explain the confidence policy and evidence used for a saved place resolution."""
+    """Explain the evidence and provenance behind one saved place resolution."""
     memory = store.get(memory_id)
     if not memory:
         return {'error': 'memory not found', 'memory_id': memory_id}
     return {
         'memory_id': memory.id,
         'hint': memory.hint.model_dump() if memory.hint else None,
-        **explain_resolution(memory.resolution_status, memory.candidates),
+        **explain_resolution(
+            memory.resolution_status,
+            memory.candidates,
+            memory.resolution_method,
+            memory.pre_resolution_confidence,
+            memory.pre_resolution_gap,
+        ),
     }
 
 

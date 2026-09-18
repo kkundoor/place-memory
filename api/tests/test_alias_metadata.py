@@ -15,14 +15,16 @@ def place(
     primary_type: str,
     types: list[str],
     aliases: list[str] | None = None,
+    latitude: float = 37.769,
+    longitude: float = -122.473,
 ) -> RawPlace:
     return RawPlace(
         place_id=place_id,
         name=name,
         aliases=aliases or [],
         formatted_address=address,
-        latitude=37.769,
-        longitude=-122.473,
+        latitude=latitude,
+        longitude=longitude,
         primary_type=primary_type,
         types=types,
         provider='photon',
@@ -46,6 +48,9 @@ async def test_nominatim_lookup_extracts_historical_aliases_and_caches():
                 'name': 'Blue Heron Lake',
                 'old_name': 'Stow Lake',
                 'name:es': 'Lago Blue Heron',
+                'name:etymology': 'William W. Stow',
+                'name:etymology:wikidata': 'Q116225246',
+                'name:etymology:wikipedia': 'en:William W. Stow',
                 'brand': 'not an alias signal',
             },
         }])
@@ -132,6 +137,49 @@ async def test_historical_alias_can_auto_resolve_current_canonical_place():
     assert selected.aliases == ['Stow Lake']
     assert ranked[0].confidence == 1.0
     assert 'name_source=alias:Stow Lake' in ranked[0].confidence_reasons
+
+
+@pytest.mark.asyncio
+async def test_alias_collision_stays_in_review():
+    candidates = [
+        place(
+            'photon:N:1',
+            'North Harbor Cafe',
+            '10 Main Street, Detroit, Michigan, United States',
+            'cafe',
+            ['amenity', 'cafe'],
+            aliases=['Old Mill'],
+            latitude=42.330,
+            longitude=-83.040,
+        ),
+        place(
+            'photon:N:2',
+            'South Harbor Cafe',
+            '20 Main Street, Detroit, Michigan, United States',
+            'cafe',
+            ['amenity', 'cafe'],
+            aliases=['Old Mill'],
+            latitude=42.331,
+            longitude=-83.041,
+        ),
+    ]
+
+    class Search:
+        async def search_places(self, hint):
+            return candidates
+
+    status, selected, ranked = await resolve_hint(
+        PlaceHint(name='Old Mill', city_hint='Detroit', category_hint='cafe'),
+        Search(),
+    )
+
+    assert status == ResolutionStatus.needs_review
+    assert selected is not None
+    assert len(ranked) == 2
+    assert ranked[0].confidence == 1.0
+    assert ranked[1].confidence == 1.0
+    assert 'name_source=alias:Old Mill' in ranked[0].confidence_reasons
+    assert 'name_source=alias:Old Mill' in ranked[1].confidence_reasons
 
 
 @pytest.mark.asyncio

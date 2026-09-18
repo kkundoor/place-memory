@@ -9,6 +9,10 @@ from app.models import PlaceHint
 
 
 _ALIAS_KEYS = ('old_name', 'alt_name', 'loc_name', 'short_name', 'official_name')
+_LANGUAGE_NAME_KEY = re.compile(
+    r'^name:[a-z]{2,3}(?:[-_][a-z0-9]{2,8})*$',
+    re.IGNORECASE,
+)
 
 
 class NominatimClient:
@@ -114,19 +118,24 @@ class NominatimClient:
     def _extract_aliases(namedetails: dict, canonical: str) -> list[str]:
         aliases: list[str] = []
         seen = {canonical.casefold()} if canonical else set()
+
         for key, value in namedetails.items():
             key_text = str(key).lower()
-            if not (
-                key_text.startswith('name:')
-                or any(key_text == item or key_text.startswith(f'{item}:') for item in _ALIAS_KEYS)
-            ):
+            is_language_name = bool(_LANGUAGE_NAME_KEY.fullmatch(key_text))
+            is_alias_key = any(
+                key_text == item or key_text.startswith(f'{item}:')
+                for item in _ALIAS_KEYS
+            )
+            if not (is_language_name or is_alias_key):
                 continue
+
             for part in str(value or '').split(';'):
                 alias = part.strip()
                 folded = alias.casefold()
                 if alias and folded not in seen:
                     aliases.append(alias)
                     seen.add(folded)
+
         return aliases
 
     @staticmethod
@@ -135,7 +144,11 @@ class NominatimClient:
         match = re.search(r'(?:^|:)(N|W|R|node|way|relation):?(\d+)$', value, re.I)
         if not match:
             return None
-        prefix = {'node': 'N', 'way': 'W', 'relation': 'R'}.get(match.group(1).lower(), match.group(1).upper())
+        prefix = {
+            'node': 'N',
+            'way': 'W',
+            'relation': 'R',
+        }.get(match.group(1).lower(), match.group(1).upper())
         return f'{prefix}{match.group(2)}'
 
     @staticmethod
@@ -144,7 +157,11 @@ class NominatimClient:
         osm_id = str(item.get('osm_id') or '')
         if not osm_id:
             return None
-        prefix = {'node': 'N', 'way': 'W', 'relation': 'R'}.get(osm_type.lower(), osm_type.upper())
+        prefix = {
+            'node': 'N',
+            'way': 'W',
+            'relation': 'R',
+        }.get(osm_type.lower(), osm_type.upper())
         return f'{prefix}{osm_id}' if prefix in {'N', 'W', 'R'} else None
 
     @staticmethod

@@ -60,7 +60,7 @@ async def test_status_parses_live_open_flag():
 
 
 @pytest.mark.asyncio
-async def test_route_uses_place_id_and_parses_duration():
+async def test_route_uses_coordinates_and_parses_duration():
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -70,9 +70,19 @@ async def test_route_uses_place_id_and_parses_duration():
         })
 
     client = GoogleMapsClient('secret-key', transport=httpx.MockTransport(handler))
-    route = await client.route(Origin(latitude=40.95, longitude=-72.2), 'place-1')
+    route = await client.route(
+        Origin(latitude=40.95, longitude=-72.2),
+        Origin(latitude=40.97, longitude=-72.17),
+    )
 
-    assert seen['body']['destination'] == {'placeId': 'place-1'}
+    assert seen['body']['destination'] == {
+        'location': {
+            'latLng': {
+                'latitude': 40.97,
+                'longitude': -72.17,
+            }
+        }
+    }
     assert seen['body']['travelMode'] == 'DRIVE'
     assert seen['body']['routingPreference'] == 'TRAFFIC_AWARE'
     assert route.duration_seconds == 732
@@ -127,7 +137,10 @@ async def test_route_without_candidate_returns_unknown_travel_time():
         return httpx.Response(200, json={'routes': []})
 
     client = GoogleMapsClient('secret-key', transport=httpx.MockTransport(handler))
-    route = await client.route(Origin(latitude=40.95, longitude=-72.2), 'place-1')
+    route = await client.route(
+        Origin(latitude=40.95, longitude=-72.2),
+        Origin(latitude=40.97, longitude=-72.17),
+    )
 
     assert route.duration_seconds is None
     assert route.distance_meters is None
