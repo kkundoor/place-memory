@@ -2,7 +2,6 @@ name: ci
 
 on:
   push:
-    branches: [main, resolver-redesign-spec]
   pull_request:
 
 jobs:

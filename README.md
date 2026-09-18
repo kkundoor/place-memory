@@ -68,6 +68,8 @@ category: 1.00
 
 The before/after run is documented in [`docs/field-test-2026-09-17.md`](docs/field-test-2026-09-17.md).
 
+The current input path also preserves the original screenshot alongside the interpreted result. Text can be supplied with the image as extra context, but it remains stored separately from the model's extracted evidence. A saved screenshot was live-tested through a backend restart to verify that the artifact and memory remain linked.
+
 ## evaluation
 
 I keep controlled resolver tests separate from live product evidence.
@@ -116,7 +118,7 @@ See [`evals/README.md`](evals/README.md).
 - Photon for no-key candidate search
 - Nominatim `/lookup` for OSM alias metadata
 - RapidFuzz + explicit resolver policy
-- SQLite
+- SQLite + local artifact storage
 - optional MCP adapter
 - pytest + GitHub Actions
 - Docker / Docker Compose
@@ -161,6 +163,7 @@ npm run dev
 
 - `POST /api/memories/ingest`
 - `POST /api/memories/ingest-image`
+- `GET /api/memories/{id}/source-image`
 - `POST /api/memories/{id}/confirm`
 - `POST /api/memories/{id}/reject`
 - `GET /api/memories/{id}/resolution`
@@ -170,11 +173,11 @@ npm run dev
 
 This is still an engineering prototype, not a production service.
 
-- original screenshot bytes are analyzed but not yet stored with the memory
-- text and screenshot are still separate input modes
+- screenshot storage is local filesystem storage behind a small storage boundary; it is not a durable cloud-object-store design
 - the real-artifact evaluation set is still small
 - provider recall is not yet measured on a broad enough real set to justify more retrieval infrastructure
 - opening-hours data is unavailable when there is no compatible status-provider identity
-- SQLite is appropriate for the current local single-user version, not multi-user production storage
+- SQLite + local files are appropriate for the current local single-user version, not multi-user production storage
+- a public deployment would need user isolation before accepting private screenshots
 
-The next pass is **unified evidence input + original screenshot persistence**, while expanding the real-artifact evaluation set in parallel.
+The next pass is the **curated real-artifact pilot**, followed by fixes only where that pilot exposes a real gap.
