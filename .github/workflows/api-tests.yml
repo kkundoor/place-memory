@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, resolver-redesign-spec]
   pull_request:
 
 jobs:
@@ -18,8 +18,12 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - run: pytest -q
-      - name: resolver safety eval
+      - name: resolver synthetic safety eval
         run: python ../evals/run_resolution_eval.py
+      - name: resolver field safety eval
+        run: python ../evals/run_field_resolution_eval.py
+      - name: resolver redesign invariants
+        run: python -m pytest ../evals/spec_tests/test_resolver_redesign_spec.py -q
 
   mcp:
     runs-on: ubuntu-latest

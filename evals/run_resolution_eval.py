@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -6,30 +7,25 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'api'))
 
 from app.models import ResolutionStatus  # noqa: E402
-from app.services.resolver import decide_resolution, score_candidate  # noqa: E402
+from app.services.resolver import resolve_hint  # noqa: E402
 from resolution_cases import CASES  # noqa: E402
 
 
-def evaluate() -> dict:
-    rows = []
-    correct_top1 = 0
-    truth_cases = 0
-    correct_auto = 0
-    auto_count = 0
-    expected_auto = 0
-    false_auto = 0
-    review_count = 0
+class Search:
+    def __init__(self, places):
+        self.places = places
 
+    async def search_places(self, hint):
+        return self.places
+
+
+async def evaluate() -> dict:
+    rows = []
+    correct_top1 = truth_cases = correct_auto = auto_count = expected_auto = false_auto = review_count = 0
     for case in CASES:
-        ranked = sorted(
-            [score_candidate(case.hint, candidate) for candidate in case.candidates],
-            key=lambda candidate: candidate.confidence,
-            reverse=True,
-        )
-        status, selected = decide_resolution(ranked)
+        status, selected, ranked = await resolve_hint(case.hint, Search(case.candidates))
         top_id = ranked[0].place_id if ranked else None
         resolved_id = selected.place_id if status == ResolutionStatus.resolved and selected else None
-
         if case.expected_id is not None:
             truth_cases += 1
             correct_top1 += int(top_id == case.expected_id)
@@ -43,7 +39,6 @@ def evaluate() -> dict:
                 false_auto += 1
         else:
             review_count += 1
-
         rows.append({
             'case': case.name,
             'expected_id': case.expected_id,
@@ -53,7 +48,6 @@ def evaluate() -> dict:
             'top_confidence': ranked[0].confidence if ranked else None,
             'resolved_id': resolved_id,
         })
-
     total = len(CASES)
     return {
         'summary': {
@@ -69,7 +63,7 @@ def evaluate() -> dict:
 
 
 if __name__ == '__main__':
-    result = evaluate()
+    result = asyncio.run(evaluate())
     output = ROOT / 'evals' / 'results.json'
     output.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result['summary'], indent=2))

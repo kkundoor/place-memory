@@ -1,5 +1,5 @@
 export type PlaceHint = {
-  name: string;
+  name?: string | null;
   city_hint?: string | null;
   address_hint?: string | null;
   category_hint?: string | null;
@@ -26,6 +26,9 @@ export type Memory = {
   source_url?: string | null;
   note?: string | null;
   resolution_status: 'unresolved' | 'resolved' | 'needs_review';
+  resolution_method?: 'auto' | 'manual' | 'abstained' | null;
+  pre_resolution_confidence?: number | null;
+  pre_resolution_gap?: number | null;
   hint?: PlaceHint | null;
   place?: PlaceCandidate | null;
   candidates: PlaceCandidate[];

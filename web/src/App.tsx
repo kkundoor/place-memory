@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 
 import { MemoryCard } from './components/MemoryCard';
-import { confirmMemory, deleteMemory, getFeasible, getMap, ingestImage, ingestMemory, listMemories } from './lib/api';
+import { confirmMemory, deleteMemory, getFeasible, getMap, ingestImage, ingestMemory, listMemories, rejectCandidates } from './lib/api';
 import type { FeasibleMemory, Memory, PlaceCandidate } from './types';
 import './styles.css';
 
@@ -53,6 +53,16 @@ export default function App() {
       await refresh();
     } catch {
       setMessage('could not confirm place');
+    }
+  }
+
+  async function reject(memory: Memory) {
+    try {
+      await rejectCandidates(memory);
+      setMessage('kept unresolved — none of those matches were right');
+      await refresh();
+    } catch {
+      setMessage('could not reject candidates');
     }
   }
 
@@ -161,7 +171,13 @@ export default function App() {
         </div>
         <div className="grid">
           {memories.map((memory) => (
-            <MemoryCard key={memory.id} memory={memory} onConfirm={confirm} onDelete={remove} />
+            <MemoryCard
+              key={memory.id}
+              memory={memory}
+              onConfirm={confirm}
+              onReject={reject}
+              onDelete={remove}
+            />
           ))}
         </div>
       </section>

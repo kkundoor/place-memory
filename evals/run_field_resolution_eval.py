@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -7,44 +8,36 @@ sys.path.insert(0, str(ROOT / 'api'))
 sys.path.insert(0, str(ROOT / 'evals'))
 
 from app.models import ResolutionStatus  # noqa: E402
-from app.services.resolver import decide_resolution, score_candidate  # noqa: E402
+from app.services.resolver import resolve_hint  # noqa: E402
 from field_cases import CASES  # noqa: E402
 
 
-def evaluate() -> dict:
+class Search:
+    def __init__(self, places):
+        self.places = places
+
+    async def search_places(self, hint):
+        return self.places
+
+
+async def evaluate() -> dict:
     rows = []
-    mode_correct = 0
-    labeled_top1 = 0
-    labeled_cases = 0
-    false_auto = 0
-
+    mode_correct = labeled_top1 = labeled_cases = false_auto = 0
     for case in CASES:
-        ranked = sorted(
-            [score_candidate(case.hint, candidate) for candidate in case.candidates],
-            key=lambda candidate: candidate.confidence,
-            reverse=True,
-        )
-        status, selected = decide_resolution(ranked)
+        status, selected, ranked = await resolve_hint(case.hint, Search(case.candidates))
         top_id = ranked[0].place_id if ranked else None
-
         if case.expected_top_ids:
             labeled_cases += 1
             labeled_top1 += int(top_id in case.expected_top_ids)
-
         observed_mode = (
-            'auto'
-            if status == ResolutionStatus.resolved
-            else 'review'
-            if status == ResolutionStatus.needs_review
+            'auto' if status == ResolutionStatus.resolved
+            else 'review' if status == ResolutionStatus.needs_review
             else 'abstain'
         )
-
         correct_mode = observed_mode == case.expected_mode
         mode_correct += int(correct_mode)
-
         if observed_mode == 'auto' and case.expected_mode != 'auto':
             false_auto += 1
-
         rows.append({
             'case': case.name,
             'expected_mode': case.expected_mode,
@@ -57,7 +50,6 @@ def evaluate() -> dict:
             'candidate_count': len(ranked),
             'selected_id': selected.place_id if selected else None,
         })
-
     total = len(CASES)
     return {
         'corpus': 'field',
@@ -72,8 +64,10 @@ def evaluate() -> dict:
 
 
 if __name__ == '__main__':
-    result = evaluate()
+    result = asyncio.run(evaluate())
     output = ROOT / 'evals' / 'field_results.json'
     output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     print(json.dumps(result['summary'], indent=2))
+    if result['summary']['false_auto_resolution_rate'] > 0:
+        raise SystemExit('field safety gate failed: false auto-resolution detected')
     print('field results written to evals/field_results.json')

@@ -6,7 +6,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from app.models import Memory, MemoryCreate, PlaceCandidate, PlaceHint, ResolutionStatus, SourceType
+from app.models import (
+    Memory,
+    MemoryCreate,
+    PlaceCandidate,
+    PlaceHint,
+    ResolutionMethod,
+    ResolutionStatus,
+    SourceType,
+)
 
 
 class MemoryStore:
@@ -31,6 +39,9 @@ class MemoryStore:
                     note text,
                     created_at text not null,
                     resolution_status text not null,
+                    resolution_method text,
+                    pre_resolution_confidence real,
+                    pre_resolution_gap real,
                     hint_json text,
                     place_json text,
                     candidates_json text
@@ -40,6 +51,12 @@ class MemoryStore:
             columns = {row['name'] for row in conn.execute('pragma table_info(memories)').fetchall()}
             if 'candidates_json' not in columns:
                 conn.execute('alter table memories add column candidates_json text')
+            if 'resolution_method' not in columns:
+                conn.execute('alter table memories add column resolution_method text')
+            if 'pre_resolution_confidence' not in columns:
+                conn.execute('alter table memories add column pre_resolution_confidence real')
+            if 'pre_resolution_gap' not in columns:
+                conn.execute('alter table memories add column pre_resolution_gap real')
 
     def create(self, data: MemoryCreate) -> Memory:
         memory = Memory(
@@ -77,6 +94,9 @@ class MemoryStore:
         place: PlaceCandidate | None,
         status: ResolutionStatus,
         candidates: list[PlaceCandidate] | None = None,
+        resolution_method: ResolutionMethod | None = None,
+        pre_resolution_confidence: float | None = None,
+        pre_resolution_gap: float | None = None,
     ) -> Memory | None:
         memory = self.get(memory_id)
         if not memory:
@@ -85,6 +105,9 @@ class MemoryStore:
             'hint': hint,
             'place': place,
             'resolution_status': status,
+            'resolution_method': resolution_method,
+            'pre_resolution_confidence': pre_resolution_confidence,
+            'pre_resolution_gap': pre_resolution_gap,
             'candidates': memory.candidates if candidates is None else candidates,
         })
         self._write(updated)
@@ -93,14 +116,16 @@ class MemoryStore:
     def _write(self, memory: Memory) -> None:
         hint_json = memory.hint.model_dump_json() if memory.hint else None
         place_json = memory.place.model_dump_json() if memory.place else None
-        candidates_json = json.dumps([item.model_dump() for item in memory.candidates])
+        candidates_json = json.dumps([item.model_dump() for item in memory.candidates], ensure_ascii=False)
         with self._connect() as conn:
             conn.execute(
                 '''
                 insert or replace into memories (
                     id, source_type, source_text, source_url, note, created_at,
-                    resolution_status, hint_json, place_json, candidates_json
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    resolution_status, resolution_method,
+                    pre_resolution_confidence, pre_resolution_gap,
+                    hint_json, place_json, candidates_json
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''',
                 (
                     memory.id,
@@ -110,6 +135,9 @@ class MemoryStore:
                     memory.note,
                     memory.created_at.isoformat(),
                     memory.resolution_status.value,
+                    memory.resolution_method.value if memory.resolution_method else None,
+                    memory.pre_resolution_confidence,
+                    memory.pre_resolution_gap,
                     hint_json,
                     place_json,
                     candidates_json,
@@ -120,10 +148,7 @@ class MemoryStore:
     def _from_row(row: sqlite3.Row) -> Memory:
         hint = PlaceHint.model_validate_json(row['hint_json']) if row['hint_json'] else None
         place = PlaceCandidate.model_validate_json(row['place_json']) if row['place_json'] else None
-        candidates = [
-            PlaceCandidate.model_validate(item)
-            for item in json.loads(row['candidates_json'] or '[]')
-        ]
+        candidates = [PlaceCandidate.model_validate(item) for item in json.loads(row['candidates_json'] or '[]')]
         return Memory(
             id=row['id'],
             source_type=SourceType(row['source_type']),
@@ -132,6 +157,9 @@ class MemoryStore:
             note=row['note'],
             created_at=datetime.fromisoformat(row['created_at']),
             resolution_status=ResolutionStatus(row['resolution_status']),
+            resolution_method=ResolutionMethod(row['resolution_method']) if row['resolution_method'] else None,
+            pre_resolution_confidence=row['pre_resolution_confidence'],
+            pre_resolution_gap=row['pre_resolution_gap'],
             hint=hint,
             place=place,
             candidates=candidates,

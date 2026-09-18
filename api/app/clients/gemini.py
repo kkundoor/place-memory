@@ -61,9 +61,12 @@ class GeminiExtractor:
         return (
             'Extract the most likely real-world place from this saved artifact. '
             'Return only evidence visible or directly supported by the artifact. '
-            'Do not guess an address, city, or category that is not supported. '
-            'The name should be the place or business name, not the social account name, '
-            'unless they are clearly the same place. '
+            'Do not guess an address, city, category, or identity that is not supported. '
+            'The name must be a specific place or business name, not a generic category. '
+            'If no specific place or business identity is visible or directly supported, '
+            'set name to null. Generic phrases such as coffee shop, bakery, restaurant, '
+            'museum, or cafe belong in category_hint rather than name. '
+            'Do not treat a social account name as the place unless they are clearly the same. '
             f'Artifact:\n{source}'
         )
 

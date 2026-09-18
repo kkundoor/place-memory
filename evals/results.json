@@ -1,11 +1,11 @@
 {
   "summary": {
     "cases": 12,
-    "top1_accuracy_on_labeled_cases": 0.75,
+    "top1_accuracy_on_labeled_cases": 1.0,
     "auto_resolution_precision": 1.0,
-    "auto_resolution_recall_on_safe_cases": 0.8333,
+    "auto_resolution_recall_on_safe_cases": 1.0,
     "false_auto_resolution_rate": 0.0,
-    "review_or_abstain_rate": 0.5833
+    "review_or_abstain_rate": 0.5
   },
   "cases": [
     {
@@ -14,7 +14,7 @@
       "should_auto_resolve": true,
       "status": "resolved",
       "top_id": "carissa",
-      "top_confidence": 0.9643,
+      "top_confidence": 1.0,
       "resolved_id": "carissa"
     },
     {
@@ -23,7 +23,7 @@
       "should_auto_resolve": true,
       "status": "resolved",
       "top_id": "carissa",
-      "top_confidence": 0.9243,
+      "top_confidence": 0.96,
       "resolved_id": "carissa"
     },
     {
@@ -32,7 +32,7 @@
       "should_auto_resolve": false,
       "status": "needs_review",
       "top_id": "point-bar",
-      "top_confidence": 0.7774,
+      "top_confidence": 0.8717,
       "resolved_id": null
     },
     {
@@ -41,25 +41,25 @@
       "should_auto_resolve": false,
       "status": "needs_review",
       "top_id": "sb-1",
-      "top_confidence": 0.8614,
+      "top_confidence": 1.0,
       "resolved_id": null
     },
     {
       "case": "chain disambiguated by address",
       "expected_id": "sb-2",
       "should_auto_resolve": true,
-      "status": "needs_review",
+      "status": "resolved",
       "top_id": "sb-2",
-      "top_confidence": 0.8588,
-      "resolved_id": null
+      "top_confidence": 1.0,
+      "resolved_id": "sb-2"
     },
     {
       "case": "wrong category should not be blindly trusted",
       "expected_id": "commons-restaurant",
       "should_auto_resolve": false,
       "status": "needs_review",
-      "top_id": "commons-office",
-      "top_confidence": 0.8132,
+      "top_id": "commons-restaurant",
+      "top_confidence": 0.84,
       "resolved_id": null
     },
     {
@@ -77,7 +77,7 @@
       "should_auto_resolve": true,
       "status": "resolved",
       "top_id": "dia",
-      "top_confidence": 0.8446,
+      "top_confidence": 1.0,
       "resolved_id": "dia"
     },
     {
@@ -85,8 +85,8 @@
       "expected_id": "dia",
       "should_auto_resolve": false,
       "status": "needs_review",
-      "top_id": "dia-shop",
-      "top_confidence": 0.4764,
+      "top_id": "dia",
+      "top_confidence": 0.5286,
       "resolved_id": null
     },
     {
@@ -95,7 +95,7 @@
       "should_auto_resolve": true,
       "status": "resolved",
       "top_id": "union-detroit",
-      "top_confidence": 0.9444,
+      "top_confidence": 1.0,
       "resolved_id": "union-detroit"
     },
     {
@@ -104,7 +104,7 @@
       "should_auto_resolve": false,
       "status": "needs_review",
       "top_id": "central-1",
-      "top_confidence": 0.875,
+      "top_confidence": 1.0,
       "resolved_id": null
     },
     {
@@ -113,7 +113,7 @@
       "should_auto_resolve": true,
       "status": "resolved",
       "top_id": "savas",
-      "top_confidence": 0.8275,
+      "top_confidence": 0.9455,
       "resolved_id": "savas"
     }
   ]

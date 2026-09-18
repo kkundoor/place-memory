@@ -2,7 +2,7 @@
   "corpus": "field",
   "summary": {
     "cases": 5,
-    "decision_mode_accuracy": 0.4,
+    "decision_mode_accuracy": 1.0,
     "top1_accuracy_on_labeled_cases": 1.0,
     "false_auto_resolution_rate": 0.0
   },
@@ -13,12 +13,12 @@
       "observed_mode": "review",
       "mode_correct": true,
       "top_id": "photon:N:12552300476",
-      "top_confidence": 0.5732,
+      "top_confidence": 0.8615,
       "expected_top_ids": [
         "photon:N:12552300476"
       ],
       "top1_correct": true,
-      "candidate_count": 5,
+      "candidate_count": 2,
       "selected_id": "photon:N:12552300476"
     },
     {
@@ -27,7 +27,7 @@
       "observed_mode": "review",
       "mode_correct": true,
       "top_id": "photon:N:2742714779",
-      "top_confidence": 0.7488,
+      "top_confidence": 1.0,
       "expected_top_ids": [],
       "top1_correct": null,
       "candidate_count": 5,
@@ -36,41 +36,41 @@
     {
       "case": "carissas provider miss returns geography",
       "expected_mode": "abstain",
-      "observed_mode": "review",
-      "mode_correct": false,
-      "top_id": "photon:R:175730",
-      "top_confidence": 0.4486,
+      "observed_mode": "abstain",
+      "mode_correct": true,
+      "top_id": null,
+      "top_confidence": null,
       "expected_top_ids": [],
       "top1_correct": null,
-      "candidate_count": 5,
-      "selected_id": "photon:R:175730"
+      "candidate_count": 0,
+      "selected_id": null
     },
     {
       "case": "dia duplicate osm representations",
       "expected_mode": "auto",
-      "observed_mode": "review",
-      "mode_correct": false,
+      "observed_mode": "auto",
+      "mode_correct": true,
       "top_id": "photon:N:10905214429",
-      "top_confidence": 0.7324,
+      "top_confidence": 1.0,
       "expected_top_ids": [
         "photon:N:10905214429",
         "photon:R:1553447"
       ],
       "top1_correct": true,
-      "candidate_count": 3,
+      "candidate_count": 2,
       "selected_id": "photon:N:10905214429"
     },
     {
       "case": "generic coffee shop has no identity",
       "expected_mode": "abstain",
-      "observed_mode": "review",
-      "mode_correct": false,
-      "top_id": "photon:W:19521588",
-      "top_confidence": 0.653,
+      "observed_mode": "abstain",
+      "mode_correct": true,
+      "top_id": null,
+      "top_confidence": null,
       "expected_top_ids": [],
       "top1_correct": null,
-      "candidate_count": 5,
-      "selected_id": "photon:W:19521588"
+      "candidate_count": 0,
+      "selected_id": null
     }
   ]
 }

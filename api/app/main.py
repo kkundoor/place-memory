@@ -22,11 +22,12 @@ from app.models import (
     MemoryCreate,
     PlaceCandidate,
     PlaceHint,
+    ResolutionMethod,
     ResolutionStatus,
     SourceType,
 )
 from app.services.feasibility import check_memories
-from app.services.resolver import explain_resolution, resolve_hint
+from app.services.resolver import explain_resolution, resolution_metrics, resolve_hint
 from app.services.retrieval import search_memories
 from app.storage.sqlite import MemoryStore
 
@@ -102,6 +103,34 @@ def delete_memory(memory_id: str) -> Response:
     return Response(status_code=204)
 
 
+def _persist_resolution(
+    memory_id: str,
+    hint: PlaceHint,
+    status: ResolutionStatus,
+    selected: PlaceCandidate | None,
+    candidates: list[PlaceCandidate],
+) -> Memory | None:
+    confidence, gap = resolution_metrics(candidates)
+    method = (
+        ResolutionMethod.auto
+        if status == ResolutionStatus.resolved
+        else ResolutionMethod.abstained
+        if status == ResolutionStatus.unresolved
+        else None
+    )
+    canonical = selected if status == ResolutionStatus.resolved else None
+    return store.update_resolution(
+        memory_id,
+        hint,
+        canonical,
+        status,
+        candidates,
+        resolution_method=method,
+        pre_resolution_confidence=confidence,
+        pre_resolution_gap=gap,
+    )
+
+
 @app.post('/api/memories/ingest')
 async def ingest_memory(data: MemoryCreate) -> dict:
     try:
@@ -120,7 +149,7 @@ async def ingest_memory(data: MemoryCreate) -> dict:
         logger.exception('place_search_failed memory_id=%s', memory.id)
         updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
         return {'memory': updated, 'candidates': [], 'warning': 'place search is temporarily unavailable'}
-    updated = store.update_resolution(memory.id, hint, selected, status, candidates)
+    updated = _persist_resolution(memory.id, hint, status, selected, candidates)
     return {'memory': updated, 'candidates': candidates}
 
 
@@ -143,7 +172,7 @@ async def ingest_image(
 
     memory = store.create(MemoryCreate(
         source_type=SourceType.screenshot,
-        source_text=hint.evidence or hint.name,
+        source_text=hint.evidence or hint.name or 'screenshot',
         source_url=source_url,
         note=note,
         hint=hint,
@@ -158,7 +187,7 @@ async def ingest_image(
         logger.exception('place_search_failed memory_id=%s', memory.id)
         updated = store.update_resolution(memory.id, hint, None, ResolutionStatus.unresolved)
         return {'memory': updated, 'candidates': [], 'warning': 'place search is temporarily unavailable'}
-    updated = store.update_resolution(memory.id, hint, selected, status, candidates)
+    updated = _persist_resolution(memory.id, hint, status, selected, candidates)
     return {'memory': updated, 'candidates': candidates}
 
 
@@ -174,7 +203,7 @@ async def resolve_memory(memory_id: str, hint: PlaceHint) -> dict:
     except httpx.HTTPError as exc:
         logger.exception('place_search_failed memory_id=%s', memory_id)
         raise HTTPException(status_code=503, detail='place search is temporarily unavailable') from exc
-    memory = store.update_resolution(memory_id, hint, selected, status, candidates)
+    memory = _persist_resolution(memory_id, hint, status, selected, candidates)
     return {'memory': memory, 'candidates': candidates}
 
 
@@ -186,7 +215,13 @@ def resolution_explanation(memory_id: str) -> dict:
     return {
         'memory_id': memory.id,
         'hint': memory.hint.model_dump() if memory.hint else None,
-        **explain_resolution(memory.resolution_status, memory.candidates),
+        **explain_resolution(
+            memory.resolution_status,
+            memory.candidates,
+            memory.resolution_method,
+            memory.pre_resolution_confidence,
+            memory.pre_resolution_gap,
+        ),
     }
 
 
@@ -212,11 +247,38 @@ def confirm_memory(memory_id: str, candidate: PlaceCandidate) -> Memory:
         memory_id,
         memory.hint,
         selected.model_copy(update={
-            'confidence': 1.0,
             'confidence_reasons': [*selected.confidence_reasons, 'confirmed by user'],
         }),
         ResolutionStatus.resolved,
         memory.candidates,
+        resolution_method=ResolutionMethod.manual,
+        pre_resolution_confidence=(
+            memory.pre_resolution_confidence
+            if memory.pre_resolution_confidence is not None
+            else selected.confidence
+        ),
+        pre_resolution_gap=memory.pre_resolution_gap,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail='memory not found')
+    return updated
+
+
+@app.post('/api/memories/{memory_id}/reject', response_model=Memory)
+def reject_memory_candidates(memory_id: str) -> Memory:
+    memory = store.get(memory_id)
+    if not memory or not memory.hint:
+        raise HTTPException(status_code=404, detail='memory or hint not found')
+
+    updated = store.update_resolution(
+        memory_id,
+        memory.hint,
+        None,
+        ResolutionStatus.unresolved,
+        memory.candidates,
+        resolution_method=ResolutionMethod.abstained,
+        pre_resolution_confidence=memory.pre_resolution_confidence,
+        pre_resolution_gap=memory.pre_resolution_gap,
     )
     if not updated:
         raise HTTPException(status_code=404, detail='memory not found')

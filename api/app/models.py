@@ -17,8 +17,14 @@ class ResolutionStatus(str, Enum):
     needs_review = 'needs_review'
 
 
+class ResolutionMethod(str, Enum):
+    auto = 'auto'
+    manual = 'manual'
+    abstained = 'abstained'
+
+
 class PlaceHint(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
     city_hint: str | None = Field(default=None, max_length=120)
     address_hint: str | None = Field(default=None, max_length=300)
     category_hint: str | None = Field(default=None, max_length=100)
@@ -55,6 +61,9 @@ class Memory(BaseModel):
     note: str | None = None
     created_at: datetime
     resolution_status: ResolutionStatus
+    resolution_method: ResolutionMethod | None = None
+    pre_resolution_confidence: float | None = Field(default=None, ge=0, le=1)
+    pre_resolution_gap: float | None = Field(default=None, ge=0, le=1)
     hint: PlaceHint | None = None
     place: PlaceCandidate | None = None
     candidates: list[PlaceCandidate] = Field(default_factory=list)

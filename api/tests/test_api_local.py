@@ -49,7 +49,8 @@ def test_local_ingest_review_confirm_and_query(client):
 
     assert confirm.status_code == 200
     assert confirm.json()['resolution_status'] == 'resolved'
-    assert confirm.json()['place']['confidence'] == 1.0
+    assert confirm.json()['resolution_method'] == 'manual'
+    assert confirm.json()['place']['confidence'] == 0.82
 
     query = client.get('/api/memories', params={'q': 'bakery'})
 
@@ -179,8 +180,9 @@ def test_confirm_uses_stored_candidate_instead_of_client_fields(client, monkeypa
     assert place['name'] == 'The Point Cafe'
     assert place['formatted_address'] == 'Southampton, NY'
     assert place['latitude'] == 40.89
-    assert place['confidence'] == 1.0
+    assert place['confidence'] < 1.0
     assert place['confidence_reasons'][-1] == 'confirmed by user'
+    assert confirm.json()['resolution_method'] == 'manual'
 
 
 def test_confirm_rejects_candidate_that_was_not_offered(client, monkeypatch):
@@ -269,6 +271,42 @@ def test_delete_memory_removes_saved_data(client):
     assert response.status_code == 204
     assert all(item['id'] != memory_id for item in client.get('/api/memories').json())
     assert client.delete(f'/api/memories/{memory_id}').status_code == 404
+
+
+def test_unicode_survives_api_serialization(client):
+    create = client.post('/api/memories', json={
+        'source_text': "saved Zingerman's Next Door Café in Quindío",
+        'hint': {'name': "Zingerman's Next Door Café", 'city_hint': 'Quindío'},
+    })
+    assert create.status_code == 200
+    body = client.get('/api/memories').json()[0]
+    assert body['source_text'] == "saved Zingerman's Next Door Café in Quindío"
+    assert body['hint']['name'] == "Zingerman's Next Door Café"
+    assert body['hint']['city_hint'] == 'Quindío'
+
+
+def test_reject_candidates_marks_memory_abstained(client, monkeypatch):
+    from app.clients.google_maps import RawPlace
+
+    class ReviewSearch:
+        enabled = True
+        async def search_places(self, hint):
+            return [
+                RawPlace(place_id='one', name='The Point Bar', formatted_address='Southampton, NY', latitude=40.89, longitude=-72.39, primary_type='bar', types=['bar']),
+                RawPlace(place_id='two', name='The Point Cafe', formatted_address='Southampton, NY', latitude=40.89, longitude=-72.39, primary_type='cafe', types=['cafe']),
+            ]
+
+    monkeypatch.setattr(main, 'place_search', ReviewSearch())
+    ingest = client.post('/api/memories/ingest', json={
+        'source_text': 'The Point in Southampton',
+        'hint': {'name': 'The Point', 'city_hint': 'Southampton'},
+    }).json()
+    response = client.post(f"/api/memories/{ingest['memory']['id']}/reject")
+    assert response.status_code == 200
+    body = response.json()
+    assert body['resolution_status'] == 'unresolved'
+    assert body['resolution_method'] == 'abstained'
+    assert body['place'] is None
 
 
 def test_image_ingest_rejects_unsupported_media_before_model(client):

@@ -40,11 +40,7 @@ export async function ingestImage(file: File, sourceUrl: string): Promise<Ingest
   const body = new FormData();
   body.append('image', file);
   if (sourceUrl) body.append('source_url', sourceUrl);
-
-  const response = await fetch(`${base}/api/memories/ingest-image`, {
-    method: 'POST',
-    body,
-  });
+  const response = await fetch(`${base}/api/memories/ingest-image`, { method: 'POST', body });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.detail || 'could not ingest image');
@@ -59,6 +55,12 @@ export async function confirmMemory(memory: Memory, candidate: PlaceCandidate): 
     body: JSON.stringify(candidate),
   });
   if (!response.ok) throw new Error('could not confirm place');
+  return response.json();
+}
+
+export async function rejectCandidates(memory: Memory): Promise<Memory> {
+  const response = await fetch(`${base}/api/memories/${memory.id}/reject`, { method: 'POST' });
+  if (!response.ok) throw new Error('could not reject candidates');
   return response.json();
 }
 
@@ -81,7 +83,6 @@ export async function getFeasible(
   const data = await response.json();
   return data.results;
 }
-
 
 export async function getMap(
   query: string,
