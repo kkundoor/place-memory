@@ -1,46 +1,64 @@
 # evaluation
 
-Place Memory treats evaluation as part of the resolver, not as a demo afterthought. A wrong canonical place is more damaging than asking the user for review, so the primary safety metric is **false auto-resolution rate**.
+Place Memory keeps evaluation close to the resolver because a wrong canonical identity is more damaging than asking for review.
 
-## resolver benchmark
+## corpora
 
-`python evals/run_resolution_eval.py` runs a labeled, deterministic resolver-level benchmark covering exact names, typos, chain ambiguity, address disambiguation, category conflicts, abbreviations, same-name places in different cities, and missing candidates.
+### synthetic
 
-Current fixture-level results:
+`python evals/run_resolution_eval.py`
 
-- 12 labeled cases
-- 75% top-1 accuracy on cases with a labeled target
+The original deterministic fixture suite covers clean resolver mechanics: exact names, typos, chain ambiguity, address disambiguation, category conflicts, abbreviations, same-name places in different cities, and missing candidates.
+
+Current published numbers remain fixture-level only:
+
+- 12 cases
+- 75% top-1 accuracy on labeled cases
 - 100% precision among automatic resolutions
-- 83.3% recall on cases intentionally labeled safe to auto-resolve
+- 83.3% recall on cases labeled safe to auto-resolve
 - 0% false auto-resolution rate
 - 58.3% review/abstain rate
 
-The script exits non-zero if any false automatic resolution appears, so the safety policy can be used as a CI gate.
+These numbers are not a claim about live artifact accuracy.
 
-These are **resolver-level fixture metrics**, not a claim about end-to-end real-world accuracy. The next benchmark layer uses real screenshots and live candidate providers and measures extraction accuracy, provider recall@k, latency, and cost separately.
+### field
 
-## why abstention is intentional
+`python evals/run_field_resolution_eval.py`
 
-The resolver has three outcomes:
+The field corpus is copied from actual product runs and is intentionally messy. It currently includes:
 
-- `resolved`: confidence and candidate separation pass policy
-- `needs_review`: at least one candidate exists, but evidence is not strong enough for automatic canonicalization
-- `unresolved`: no candidate exists
+- typo-tolerant Zingerman retrieval
+- Starbucks branch ambiguity
+- Carissa's provider miss returning geographic entities
+- duplicate OSM representations of Detroit Institute of Arts
+- generic “coffee shop” evidence producing irrelevant global candidates
 
-The target is not a zero review rate. Review is the safety valve for ambiguous saves, especially chain locations and incomplete social artifacts.
+Field metrics are reported separately from synthetic metrics. A clean synthetic number must never substitute for field behavior.
 
-## future system metrics
+## redesign invariant suite
 
-For live artifact evaluation:
+The resolver redesign is driven by:
 
-- extraction correctness
-- candidate recall@1 / recall@5
-- automatic-resolution precision and recall
-- false auto-resolution rate
-- review/abstention rate
-- p50 / p95 ingest latency
-- provider/model error rate
-- model and tool calls per request
-- approximate cost per ingest and query
+`python -m pytest evals/spec_tests/test_resolver_redesign_spec.py -q`
 
-Failures stay in the dataset after fixes so they become regression cases.
+Before the redesign lands, this suite is expected to expose current failures. It is intentionally outside the default `api/pytest.ini` test path so main CI stays green while the redesign is developed on a branch.
+
+The invariants cover:
+
+- no name-only auto-resolution
+- evidence monotonicity
+- explicit category crosswalk
+- hard entity-class eligibility
+- guarded duplicate collapse
+- first-class resolution provenance
+- identity abstention before provider search
+- conflicting-location safety
+- reachable realistic auto-resolution
+- Unicode bisection checks
+- explicit “none of these” review path
+
+## primary safety metric
+
+The primary safety metric remains false automatic resolution rate. Review and abstention are expected outcomes, not failures by themselves.
+
+Failures remain in their corpus after fixes so they become permanent regression cases.

@@ -1,0 +1,76 @@
+{
+  "corpus": "field",
+  "summary": {
+    "cases": 5,
+    "decision_mode_accuracy": 0.4,
+    "top1_accuracy_on_labeled_cases": 1.0,
+    "false_auto_resolution_rate": 0.0
+  },
+  "cases": [
+    {
+      "case": "zingermans typo with city",
+      "expected_mode": "review",
+      "observed_mode": "review",
+      "mode_correct": true,
+      "top_id": "photon:N:12552300476",
+      "top_confidence": 0.5732,
+      "expected_top_ids": [
+        "photon:N:12552300476"
+      ],
+      "top1_correct": true,
+      "candidate_count": 5,
+      "selected_id": "photon:N:12552300476"
+    },
+    {
+      "case": "starbucks branch ambiguity",
+      "expected_mode": "review",
+      "observed_mode": "review",
+      "mode_correct": true,
+      "top_id": "photon:N:2742714779",
+      "top_confidence": 0.7488,
+      "expected_top_ids": [],
+      "top1_correct": null,
+      "candidate_count": 5,
+      "selected_id": "photon:N:2742714779"
+    },
+    {
+      "case": "carissas provider miss returns geography",
+      "expected_mode": "abstain",
+      "observed_mode": "review",
+      "mode_correct": false,
+      "top_id": "photon:R:175730",
+      "top_confidence": 0.4486,
+      "expected_top_ids": [],
+      "top1_correct": null,
+      "candidate_count": 5,
+      "selected_id": "photon:R:175730"
+    },
+    {
+      "case": "dia duplicate osm representations",
+      "expected_mode": "auto",
+      "observed_mode": "review",
+      "mode_correct": false,
+      "top_id": "photon:N:10905214429",
+      "top_confidence": 0.7324,
+      "expected_top_ids": [
+        "photon:N:10905214429",
+        "photon:R:1553447"
+      ],
+      "top1_correct": true,
+      "candidate_count": 3,
+      "selected_id": "photon:N:10905214429"
+    },
+    {
+      "case": "generic coffee shop has no identity",
+      "expected_mode": "abstain",
+      "observed_mode": "review",
+      "mode_correct": false,
+      "top_id": "photon:W:19521588",
+      "top_confidence": 0.653,
+      "expected_top_ids": [],
+      "top1_correct": null,
+      "candidate_count": 5,
+      "selected_id": "photon:W:19521588"
+    }
+  ]
+}
