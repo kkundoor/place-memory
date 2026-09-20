@@ -45,6 +45,10 @@ def evaluate_case(case, payload):
     return {
         'case': case['case'],
         'scenario': case.get('scenario'),
+        'ground_truth_name': case.get('ground_truth_name'),
+        'ground_truth_city': case.get('ground_truth_city'),
+        'ground_truth_source': case.get('ground_truth_source'),
+        'ground_truth_notes': case.get('ground_truth_notes'),
         'expected_mode': expected_mode,
         'observed_mode': mode,
         'mode_correct': None if expected_mode is None else mode == expected_mode,
@@ -53,6 +57,7 @@ def evaluate_case(case, payload):
         'extraction_correct': extraction_correct,
         'correct_candidate_seen': None if not expected_names else rank is not None,
         'correct_candidate_rank': rank,
+        'top1_given_retrieval': None if rank is None else rank == 1,
         'false_auto': mode == 'auto' and expected_mode not in (None, 'auto'),
         'selected_name': (memory.get('place') or {}).get('name'),
         'top_confidence': memory.get('pre_resolution_confidence'),
@@ -66,6 +71,48 @@ def evaluate_case(case, payload):
 def ratio(values):
     values = [x for x in values if x is not None]
     return None if not values else round(sum(bool(x) for x in values) / len(values), 4)
+
+
+def summarize_rows(rows):
+    labeled_modes = [
+        r['mode_correct']
+        for r in rows
+        if r['mode_correct'] is not None
+    ]
+    labeled_extract = [
+        r['extraction_correct']
+        for r in rows
+        if r['extraction_correct'] is not None
+    ]
+    labeled_recall = [
+        r['correct_candidate_seen']
+        for r in rows
+        if r['correct_candidate_seen'] is not None
+    ]
+    retrieved_rankings = [
+        r['top1_given_retrieval']
+        for r in rows
+        if r['top1_given_retrieval'] is not None
+    ]
+
+    return {
+        'cases_run': len(rows),
+        'extraction_accuracy_on_labeled_cases': ratio(labeled_extract),
+        'candidate_recall_at_k_on_labeled_cases': ratio(labeled_recall),
+        'top1_accuracy_given_successful_retrieval': ratio(retrieved_rankings),
+        'candidate_labeled_cases': len(labeled_recall),
+        'successful_retrieval_cases': len(retrieved_rankings),
+        'decision_mode_accuracy_on_labeled_cases': ratio(labeled_modes),
+        'false_auto_count': sum(1 for r in rows if r['false_auto']),
+        'false_auto_resolution_rate': (
+            None
+            if not labeled_modes
+            else round(
+                sum(1 for r in rows if r['false_auto']) / len(labeled_modes),
+                4,
+            )
+        ),
+    }
 
 
 def main():
@@ -131,20 +178,7 @@ def main():
                 f"selected={row['selected_name']!r}"
             )
 
-    labeled_modes = [r['mode_correct'] for r in rows if r['mode_correct'] is not None]
-    labeled_extract = [r['extraction_correct'] for r in rows if r['extraction_correct'] is not None]
-    labeled_recall = [r['correct_candidate_seen'] for r in rows if r['correct_candidate_seen'] is not None]
-    labeled_top1 = [r['correct_candidate_rank'] == 1 for r in rows if r['correct_candidate_seen'] is not None]
-
-    summary = {
-        'cases_run': len(rows),
-        'extraction_accuracy_on_labeled_cases': ratio(labeled_extract),
-        'candidate_recall_at_k_on_labeled_cases': ratio(labeled_recall),
-        'top1_accuracy_on_labeled_cases': ratio(labeled_top1),
-        'decision_mode_accuracy_on_labeled_cases': ratio(labeled_modes),
-        'false_auto_count': sum(1 for r in rows if r['false_auto']),
-        'false_auto_resolution_rate': None if not labeled_modes else round(sum(1 for r in rows if r['false_auto']) / len(labeled_modes), 4),
-    }
+    summary = summarize_rows(rows)
 
     result = {'corpus': 'real-artifact-pilot', 'summary': summary, 'cases': rows}
     output = base_dir / 'results.json'

@@ -23,6 +23,8 @@ jobs:
         run: python ../evals/run_field_resolution_eval.py
       - name: resolver redesign invariants
         run: python -m pytest ../evals/spec_tests/test_resolver_redesign_spec.py -q
+      - name: real artifact pilot metric semantics
+        run: python -m pytest ../evals/spec_tests/test_real_artifact_pilot_metrics.py -q
 
   mcp:
     runs-on: ubuntu-latest

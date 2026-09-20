@@ -12,11 +12,22 @@ The whole `artifacts/real-pilot/` directory is gitignored so private screenshots
 
 ## labels
 
-Label each case before looking at the system result when possible:
+Keep externally verified ground truth separate from what the artifact itself supports.
 
-- `expected_extraction_name`: the specific place identity the artifact actually supports, or `null`
-- `expected_candidate_names`: acceptable canonical candidates
+Optional ground-truth provenance:
+
+- `ground_truth_name`: the actual place the artifact came from, when independently known
+- `ground_truth_city`: optional location context for that ground truth
+- `ground_truth_source`: how the ground truth was externally verified
+- `ground_truth_notes`: any additional provenance or ambiguity notes
+
+Evaluation labels:
+
+- `expected_extraction_name`: the specific place identity the artifact itself legitimately supports, or `null`
+- `expected_candidate_names`: acceptable canonical retrieval candidates when a candidate expectation is justified
 - `expected_mode`: `auto`, `review`, or `abstain`
+
+Ground truth must not be copied into `expected_extraction_name` or `expected_candidate_names` merely because the answer is known externally. A known place can still be a correct extraction abstention when the artifact does not reveal its identity.
 
 Do not label a case `auto` merely because the correct answer is known. `auto` means the artifact contains enough independent evidence that the resolver should be allowed to persist the identity without asking.
 
@@ -25,12 +36,14 @@ Do not label a case `auto` merely because the correct answer is known. `auto` me
 The runner reports separately:
 
 1. extraction correctness
-2. candidate recall@k
-3. correct-candidate rank
+2. candidate recall@k on candidate-labeled cases
+3. top-1 ranking accuracy conditional on successful retrieval
 4. decision-mode correctness
 5. false automatic resolution
 
-A miss at stage 2 is a retrieval problem. A correct candidate at rank 1 but wrong decision mode is a resolver-policy problem. A wrong extracted identity is an extraction problem.
+Candidate recall and ranking use different denominators intentionally. If the correct candidate is never retrieved, that is a retrieval failure and lowers recall@k. It is not also counted as a ranking failure. Top-1 ranking is evaluated only for cases where the acceptable candidate was actually present in the retrieved set.
+
+A correct candidate at rank 1 but wrong decision mode is a resolver-policy problem. A wrong extracted identity is an extraction problem. Ground-truth metadata is provenance only and does not change these labels or metrics.
 
 ## target set
 
