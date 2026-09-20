@@ -1,6 +1,10 @@
 # place-memory
 
+**Live demo:** https://place-memory-caxs.onrender.com
+
 A small app for turning messy place saves — screenshots, notes, captions, and links — into grounded real-world places.
+
+The hosted demo runs the real extraction → candidate retrieval → resolver path for notes and screenshots, but deliberately does not persist visitor inputs or results to Place Memory storage. Fixed regression examples underneath show resolve, review, and abstain behavior.
 
 The main constraint is simple: **the model can interpret evidence, but it does not get to declare a place identity by itself.**
 
@@ -13,7 +17,7 @@ saved artifact
 → candidates are normalized, filtered, enriched, and deduplicated
 → a deterministic resolver decides:
    resolved / needs review / unresolved
-→ the decision, candidates, score, gap, and method are stored
+→ in the persistent local app, the decision, candidates, score, gap, and method are stored
 ```
 
 The resolver uses explicit evidence such as name, location, category, candidate separation, and provider-backed aliases. Weak or conflicting evidence goes to review or abstains instead of being silently saved as fact.

@@ -10,7 +10,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
-        value: gemini-3.6-flash
+        value: gemini-3.5-flash-lite
       - key: NOMINATIM_BASE_URL
         value: https://nominatim.openstreetmap.org
       - key: NOMINATIM_USER_AGENT
