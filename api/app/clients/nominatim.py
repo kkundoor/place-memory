@@ -58,7 +58,12 @@ class NominatimClient:
                 )
                 self._last_request_at = time.monotonic()
                 response.raise_for_status()
-                return response.json()
+                try:
+                    return response.json()
+                except ValueError as exc:
+                    raise httpx.HTTPError(
+                        'nominatim returned invalid JSON'
+                    ) from exc
 
     async def search_places(self, hint: PlaceHint) -> list[RawPlace]:
         if not self.enabled:
@@ -76,7 +81,14 @@ class NominatimClient:
             'namedetails': 1,
             'limit': 5,
         })
-        places = [place for item in data if (place := self._parse(item)) is not None]
+        if not isinstance(data, list):
+            raise httpx.HTTPError('nominatim returned unexpected search payload')
+
+        places = [
+            place
+            for item in data
+            if (place := self._parse(item)) is not None
+        ]
         self._cache[query] = places
         return list(places)
 
@@ -93,23 +105,43 @@ class NominatimClient:
 
         missing = [ref for ref in place_by_ref if ref not in self._alias_cache]
         if missing:
+            batch = missing[:50]
             data = await self._get_json('/lookup', {
-                'osm_ids': ','.join(missing[:50]),
+                'osm_ids': ','.join(batch),
                 'format': 'jsonv2',
                 'namedetails': 1,
                 'addressdetails': 0,
             })
+            if not isinstance(data, list):
+                raise httpx.HTTPError('nominatim returned unexpected lookup payload')
 
             seen: set[str] = set()
             for item in data:
+                if not isinstance(item, dict):
+                    continue
+
                 ref = self._item_ref(item)
                 if not ref:
                     continue
-                seen.add(ref)
-                canonical = str((item.get('namedetails') or {}).get('name') or item.get('name') or '')
-                self._alias_cache[ref] = self._extract_aliases(item.get('namedetails') or {}, canonical)
 
-            for ref in missing:
+                seen.add(ref)
+
+                namedetails = item.get('namedetails')
+                if not isinstance(namedetails, dict):
+                    namedetails = {}
+
+                canonical = str(
+                    namedetails.get('name')
+                    or item.get('name')
+                    or ''
+                )
+                self._alias_cache[ref] = self._extract_aliases(
+                    namedetails,
+                    canonical,
+                )
+
+            # Only cache misses that were actually queried in this batch.
+            for ref in batch:
                 if ref not in seen:
                     self._alias_cache[ref] = []
 
@@ -173,6 +205,9 @@ class NominatimClient:
 
     @staticmethod
     def _parse(item: dict) -> RawPlace | None:
+        if not isinstance(item, dict):
+            return None
+
         try:
             latitude = float(item['lat'])
             longitude = float(item['lon'])
@@ -184,8 +219,14 @@ class NominatimClient:
         if not osm_id:
             return None
 
-        namedetails = item.get('namedetails') or {}
-        address = item.get('address') or {}
+        namedetails = item.get('namedetails')
+        if not isinstance(namedetails, dict):
+            namedetails = {}
+
+        address = item.get('address')
+        if not isinstance(address, dict):
+            address = {}
+
         name = (
             namedetails.get('name')
             or item.get('name')

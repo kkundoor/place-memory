@@ -57,6 +57,55 @@ export async function ingestImage(
   return response.json();
 }
 
+export async function resolveDemoMemory(
+  sourceText: string,
+  sourceUrl: string,
+): Promise<IngestResponse> {
+  const response = await fetch(`${base}/api/demo/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      source_type: sourceUrl ? 'link' : 'note',
+      source_text: sourceText,
+      source_url: sourceUrl || null,
+    }),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || 'could not resolve demo input');
+  }
+
+  return response.json();
+}
+
+
+export async function resolveDemoImage(
+  file: File,
+  sourceUrl: string,
+  context: string,
+): Promise<IngestResponse> {
+  const body = new FormData();
+
+  body.append('image', file);
+
+  if (sourceUrl) body.append('source_url', sourceUrl);
+  if (context) body.append('note', context);
+
+  const response = await fetch(`${base}/api/demo/resolve-image`, {
+    method: 'POST',
+    body,
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || 'could not resolve demo image');
+  }
+
+  return response.json();
+}
+
+
 export function sourceImageUrl(memoryId: string): string {
   return `${base}/api/memories/${memoryId}/source-image`;
 }

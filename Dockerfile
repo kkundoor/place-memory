@@ -4,6 +4,8 @@ WORKDIR /web
 COPY web/package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY web/ ./
+ARG VITE_DEMO_MODE=true
+ENV VITE_DEMO_MODE=${VITE_DEMO_MODE}
 RUN npm run build
 
 FROM python:3.12-slim

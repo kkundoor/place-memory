@@ -1,4 +1,4 @@
-﻿import httpx
+import httpx
 
 from app.clients.google_maps import RawPlace
 from app.models import PlaceHint
@@ -35,19 +35,42 @@ class PhotonClient:
                 headers={'User-Agent': self.user_agent},
             )
             response.raise_for_status()
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError as exc:
+                raise httpx.HTTPError(
+                    'photon returned invalid JSON'
+                ) from exc
+
+        if not isinstance(data, dict):
+            raise httpx.HTTPError('photon returned unexpected payload')
+
+        features = data.get('features')
+        if not isinstance(features, list):
+            raise httpx.HTTPError('photon returned unexpected features payload')
 
         return [
             place
-            for feature in data.get('features', [])
+            for feature in features
             if (place := self._parse(feature)) is not None
         ]
 
     @staticmethod
     def _parse(feature: dict) -> RawPlace | None:
-        properties = feature.get('properties') or {}
-        geometry = feature.get('geometry') or {}
-        coordinates = geometry.get('coordinates') or []
+        if not isinstance(feature, dict):
+            return None
+
+        properties = feature.get('properties')
+        if not isinstance(properties, dict):
+            return None
+
+        geometry = feature.get('geometry')
+        if not isinstance(geometry, dict):
+            return None
+
+        coordinates = geometry.get('coordinates')
+        if not isinstance(coordinates, (list, tuple)):
+            return None
 
         name = properties.get('name')
         osm_type = properties.get('osm_type')

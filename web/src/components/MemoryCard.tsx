@@ -12,11 +12,13 @@ export function MemoryCard({
   onConfirm,
   onReject,
   onDelete,
+  readOnly = false,
 }: {
   memory: Memory;
   onConfirm: (memory: Memory, candidate: PlaceCandidate) => void;
   onReject: (memory: Memory) => void;
   onDelete: (memory: Memory) => void;
+  readOnly?: boolean;
 }) {
   const displayPlace = memory.resolution_status === 'resolved' ? memory.place : null;
   const score = memory.pre_resolution_confidence ?? displayPlace?.confidence ?? null;
@@ -53,6 +55,13 @@ export function MemoryCard({
         </p>
       )}
 
+      {displayPlace?.confidence_reasons && displayPlace.confidence_reasons.length > 0 && (
+        <div className="source-context">
+          <strong>Why this decision</strong>
+          <span>{displayPlace.confidence_reasons.join(' · ')}</span>
+        </div>
+      )}
+
       {memory.note && (
         <div className="source-context">
           <strong>Your context</strong>
@@ -74,19 +83,24 @@ export function MemoryCard({
             <button
               className="secondary candidate"
               key={candidate.place_id}
+              disabled={readOnly}
               onClick={() => onConfirm(memory, candidate)}
             >
               <span>{candidate.name}</span>
               {candidate.formatted_address && <small>{candidate.formatted_address}</small>}
             </button>
           ))}
-          <button className="reject" onClick={() => onReject(memory)}>
-            None of these places
-          </button>
+          {!readOnly && (
+            <button className="reject" onClick={() => onReject(memory)}>
+              None of these places
+            </button>
+          )}
         </div>
       )}
 
-      <button className="delete" onClick={() => onDelete(memory)}>remove save</button>
+      {!readOnly && (
+        <button className="delete" onClick={() => onDelete(memory)}>remove save</button>
+      )}
     </article>
   );
 }

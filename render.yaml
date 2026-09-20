@@ -6,7 +6,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: APP_ENV
-        value: production
+        value: demo
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL

@@ -1,6 +1,8 @@
 import base64
 import logging
 import time
+from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -8,6 +10,7 @@ import httpx
 
 from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.clients.enriched import AliasEnrichedPlaceSearchClient
@@ -16,6 +19,7 @@ from app.clients.google_maps import GoogleMapsClient
 from app.clients.nominatim import NominatimClient
 from app.clients.photon import PhotonClient
 from app.config import get_settings
+from app.demo import demo_memories
 from app.models import (
     FeasibilityRequest,
     FeasibilityResponse,
@@ -57,6 +61,21 @@ app.add_middleware(
 
 
 @app.middleware('http')
+async def demo_read_only(request, call_next):
+    if (
+        settings.app_env == 'demo'
+        and request.url.path.startswith('/api/')
+        and not request.url.path.startswith('/api/demo/')
+        and request.method not in {'GET', 'HEAD', 'OPTIONS'}
+    ):
+        return JSONResponse(
+            status_code=403,
+            content={'detail': 'public demo does not persist visitor data'},
+        )
+    return await call_next(request)
+
+
+@app.middleware('http')
 async def request_metadata(request, call_next):
     request_id = request.headers.get('x-request-id') or str(uuid4())
     started = time.perf_counter()
@@ -78,6 +97,8 @@ async def request_metadata(request, call_next):
 def health() -> dict:
     return {
         'status': 'ok',
+        'app_env': settings.app_env,
+        'demo_mode': settings.app_env == 'demo',
         'place_search_enabled': place_search.enabled,
         'place_search_provider': (
             'google' if maps.enabled
@@ -96,8 +117,12 @@ def create_memory(data: MemoryCreate) -> Memory:
 
 
 @app.get('/api/memories', response_model=list[Memory])
-def list_memories(q: str = '') -> list[Memory]:
-    memories = store.list()
+async def list_memories(q: str = '') -> list[Memory]:
+    memories = (
+        await demo_memories()
+        if settings.app_env == 'demo'
+        else store.list()
+    )
     return search_memories(memories, q) if q else memories
 
 
@@ -151,6 +176,152 @@ def _persist_resolution(
         resolution_method=method,
         pre_resolution_confidence=confidence,
         pre_resolution_gap=gap,
+    )
+
+
+
+
+DEMO_WINDOW_SECONDS = 60 * 60
+DEMO_MAX_CALLS_PER_WINDOW = 60
+_demo_call_times: deque[float] = deque()
+
+
+def _consume_demo_budget() -> None:
+    now = time.monotonic()
+    cutoff = now - DEMO_WINDOW_SECONDS
+
+    while _demo_call_times and _demo_call_times[0] <= cutoff:
+        _demo_call_times.popleft()
+
+    if len(_demo_call_times) >= DEMO_MAX_CALLS_PER_WINDOW:
+        raise HTTPException(
+            status_code=429,
+            detail='public demo is temporarily at capacity; try again later',
+        )
+
+    _demo_call_times.append(now)
+
+
+async def _resolve_demo_hint(
+    hint: PlaceHint,
+    *,
+    source_type: SourceType,
+    source_text: str,
+    source_url: str | None = None,
+    note: str | None = None,
+) -> dict:
+    if not place_search.enabled:
+        memory = Memory(
+            id=f'demo-live-{uuid4()}',
+            source_type=source_type,
+            source_text=source_text,
+            source_url=source_url,
+            note=note,
+            created_at=datetime.now(timezone.utc),
+            resolution_status=ResolutionStatus.unresolved,
+            resolution_method=ResolutionMethod.abstained,
+            hint=hint,
+            candidates=[],
+        )
+        return {
+            'memory': memory,
+            'candidates': [],
+            'warning': 'place search is temporarily unavailable',
+        }
+
+    try:
+        status, selected, candidates = await resolve_hint(hint, place_search)
+    except httpx.HTTPError as exc:
+        logger.exception('demo_place_search_failed')
+        raise HTTPException(
+            status_code=503,
+            detail='place search is temporarily unavailable',
+        ) from exc
+
+    confidence, gap = resolution_metrics(candidates)
+
+    method = (
+        ResolutionMethod.auto
+        if status == ResolutionStatus.resolved
+        else ResolutionMethod.abstained
+        if status == ResolutionStatus.unresolved
+        else None
+    )
+
+    memory = Memory(
+        id=f'demo-live-{uuid4()}',
+        source_type=source_type,
+        source_text=source_text,
+        source_url=source_url,
+        note=note,
+        created_at=datetime.now(timezone.utc),
+        resolution_status=status,
+        resolution_method=method,
+        pre_resolution_confidence=confidence,
+        pre_resolution_gap=gap,
+        hint=hint,
+        place=selected if status == ResolutionStatus.resolved else None,
+        candidates=candidates,
+    )
+
+    return {
+        'memory': memory,
+        'candidates': candidates,
+    }
+
+
+@app.post('/api/demo/resolve')
+async def demo_resolve_text(data: MemoryCreate) -> dict:
+    _consume_demo_budget()
+
+    try:
+        hint = data.hint or await extractor.extract_text(data.source_text)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return await _resolve_demo_hint(
+        hint,
+        source_type=data.source_type,
+        source_text=data.source_text,
+        source_url=str(data.source_url) if data.source_url else None,
+        note=data.note,
+    )
+
+
+@app.post('/api/demo/resolve-image')
+async def demo_resolve_image(
+    image: UploadFile = File(...),
+    source_url: str | None = Form(default=None),
+    note: str | None = Form(default=None),
+) -> dict:
+    _consume_demo_budget()
+
+    if image.content_type not in {'image/jpeg', 'image/png', 'image/webp'}:
+        raise HTTPException(status_code=415, detail='jpeg, png, or webp required')
+
+    data = await image.read()
+
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail='image must be under 8 MB')
+
+    context = note.strip() if note and note.strip() else None
+
+    try:
+        hint = await extractor.extract_image(
+            data,
+            image.content_type,
+            source_url,
+            context,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return await _resolve_demo_hint(
+        hint,
+        source_type=SourceType.screenshot,
+        source_text=hint.evidence or hint.name or 'screenshot',
+        source_url=source_url,
+        note=context,
     )
 
 

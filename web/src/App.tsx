@@ -10,6 +10,8 @@ import {
   ingestMemory,
   listMemories,
   rejectCandidates,
+  resolveDemoImage,
+  resolveDemoMemory,
 } from './lib/api';
 import type { FeasibleMemory, Memory, PlaceCandidate } from './types';
 import './styles.css';
@@ -27,6 +29,8 @@ export default function App() {
   const [nowMessage, setNowMessage] = useState('');
   const [mapImage, setMapImage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [demoResult, setDemoResult] = useState<Memory | null>(null);
+  const demoMode = import.meta.env.VITE_DEMO_MODE === 'true';
 
   async function refresh() {
     setMemories(await listMemories());
@@ -48,37 +52,92 @@ export default function App() {
 
   async function save(event: FormEvent) {
     event.preventDefault();
+
     const context = sourceText.trim();
+
     if (!context && !image) return;
 
+    if (image && image.size > 8 * 1024 * 1024) {
+      setSaveMessage('Image must be under 8 MB.');
+      return;
+    }
+
     setBusy(true);
-    setSaveMessage(image ? 'Analyzing screenshot…' : 'Resolving place…');
+    setSaveMessage(
+      image
+        ? 'Reading screenshot and checking real places…'
+        : 'Reading your note and checking real places…',
+    );
 
     try {
-      const response = image
-        ? await ingestImage(image, sourceUrl.trim(), context)
-        : await ingestMemory(context, sourceUrl.trim());
+      const response = demoMode
+        ? (
+            image
+              ? await resolveDemoImage(image, sourceUrl.trim(), context)
+              : await resolveDemoMemory(context, sourceUrl.trim())
+          )
+        : (
+            image
+              ? await ingestImage(image, sourceUrl.trim(), context)
+              : await ingestMemory(context, sourceUrl.trim())
+          );
+
+      const statusMessage = demoMode
+        ? {
+            resolved: 'Place identified.',
+            needs_review: 'A likely match was found — choose the right one below.',
+            unresolved: "There wasn't enough evidence to identify a specific place.",
+          }[response.memory.resolution_status]
+        : {
+            resolved: 'Place identified and saved.',
+            needs_review: 'Saved — choose the right match below.',
+            unresolved: "Saved, but I couldn't identify the place yet.",
+          }[response.memory.resolution_status];
+
+      setSaveMessage(response.warning || statusMessage);
+
+      if (demoMode) {
+        setDemoResult(response.memory);
+        return;
+      }
 
       setSourceText('');
       setSourceUrl('');
       setImage(null);
-
-      const statusMessage = {
-        resolved: 'Place identified and saved.',
-        needs_review: 'Saved — choose the right match below.',
-        unresolved: "Saved, but I couldn't identify the place yet.",
-      }[response.memory.resolution_status];
-
-      setSaveMessage(response.warning || statusMessage);
       await refresh();
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : 'Could not save.');
+      setSaveMessage(
+        error instanceof Error
+          ? error.message
+          : 'Could not identify the place.',
+      );
     } finally {
       setBusy(false);
     }
   }
 
   async function confirm(memory: Memory, candidate: PlaceCandidate) {
+    if (demoMode && memory.id.startsWith('demo-live-')) {
+      const confirmedCandidate: PlaceCandidate = {
+        ...candidate,
+        confidence_reasons: [
+          ...(candidate.confidence_reasons || []),
+          'confirmed by demo visitor',
+        ],
+      };
+
+      const updated: Memory = {
+        ...memory,
+        place: confirmedCandidate,
+        resolution_status: 'resolved',
+        resolution_method: 'manual',
+      };
+
+      setDemoResult(updated);
+      setSaveMessage('Match confirmed locally for this demo.');
+      return;
+    }
+
     try {
       await confirmMemory(memory, candidate);
       setSaveMessage('Place confirmed.');
@@ -89,6 +148,19 @@ export default function App() {
   }
 
   async function reject(memory: Memory) {
+    if (demoMode && memory.id.startsWith('demo-live-')) {
+      const updated: Memory = {
+        ...memory,
+        place: null,
+        resolution_status: 'unresolved',
+        resolution_method: 'abstained',
+      };
+
+      setDemoResult(updated);
+      setSaveMessage('Kept unresolved — none of those matches were right.');
+      return;
+    }
+
     try {
       await rejectCandidates(memory);
       setSaveMessage('Kept unresolved — none of those matches were right.');
@@ -99,6 +171,12 @@ export default function App() {
   }
 
   async function remove(memory: Memory) {
+    if (demoMode && memory.id.startsWith('demo-live-')) {
+      setDemoResult(null);
+      setSaveMessage('');
+      return;
+    }
+
     if (!window.confirm(`Remove ${memory.place?.name || memory.hint?.name || 'this save'}?`)) return;
     try {
       await deleteMemory(memory.id);
@@ -109,6 +187,14 @@ export default function App() {
     } catch {
       setSaveMessage('Could not remove save.');
     }
+  }
+
+  function resetDemo() {
+    setSourceText('');
+    setSourceUrl('');
+    setImage(null);
+    setDemoResult(null);
+    setSaveMessage('');
   }
 
   async function checkNow() {
@@ -145,11 +231,27 @@ export default function App() {
         </p>
       </header>
 
+      {demoMode && (
+        <section className="panel demo-panel">
+          <p className="eyebrow">interactive public demo</p>
+          <h2>Give it a messy place save.</h2>
+          <p>
+            Type a note or attach a screenshot. The live demo runs the same extraction, place retrieval, and resolver
+            pipeline as the local app. Place Memory does not write demo inputs
+            or results to its storage.
+          </p>
+        </section>
+      )}
+
       <section className="panel save-panel">
         <div className="panel-heading">
           <div>
-            <h2>add a save</h2>
-            <p>Add whatever you have. Text and screenshots can work together.</p>
+            <h2>{demoMode ? 'try it live' : 'add a save'}</h2>
+            <p>
+              {demoMode
+                ? 'Use a note, screenshot, or both. The result appears below.'
+                : 'Add whatever you have. Text and screenshots can work together.'}
+            </p>
           </div>
         </div>
 
@@ -178,6 +280,17 @@ export default function App() {
             <span>{image ? 'Click to choose a different image' : 'PNG, JPG, or WebP · up to 8 MB'}</span>
           </label>
 
+          {image && (
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={() => setImage(null)}
+              disabled={busy}
+            >
+              Remove screenshot
+            </button>
+          )}
+
           <label className="field">
             <span>Source link <em>optional metadata</em></span>
             <input
@@ -188,18 +301,75 @@ export default function App() {
           </label>
 
           <button type="submit" disabled={busy || !canSave}>
-            {busy ? 'Working…' : 'Save + identify'}
+            {busy
+              ? image
+                ? 'Analyzing screenshot...'
+                : 'Identifying...'
+              : demoMode
+                ? 'Identify place'
+                : 'Save + identify'}
           </button>
         </form>
+
+        {demoMode && (
+          <p className="demo-privacy">
+            Demo inputs are not stored by Place Memory. Text and screenshots are
+            processed by Gemini; extracted place hints may be sent to
+            Photon/Nominatim for candidate lookup.
+          </p>
+        )}
 
         {saveMessage && <p className="message save-message">{saveMessage}</p>}
       </section>
 
+      {demoMode && (
+        <section className="demo-result-section">
+          <div className="section-title">
+            <div>
+              <h2>latest result</h2>
+              <p>
+                This result was returned by the live extraction → retrieval → resolver
+                path and is not written to Place Memory storage.
+              </p>
+            </div>
+          </div>
+
+          {demoResult ? (
+            <div className="demo-result">
+              <MemoryCard
+                memory={demoResult}
+                readOnly={false}
+                onConfirm={confirm}
+                onReject={reject}
+                onDelete={remove}
+              />
+
+              <button
+                type="button"
+                className="secondary-action demo-reset"
+                onClick={resetDemo}
+                disabled={busy}
+              >
+                Try another save
+              </button>
+            </div>
+          ) : (
+            <div className="empty-state">
+              Run a note or screenshot above to see the resolver decision here.
+            </div>
+          )}
+        </section>
+      )}
+
       <section>
         <div className="section-title">
           <div>
-            <h2>saved places</h2>
-            <p>Review anything uncertain before it becomes canonical.</p>
+            <h2>{demoMode ? 'regression examples' : 'saved places'}</h2>
+            <p>
+              {demoMode
+                ? 'Fixed cases below show the three intended resolver behaviors: resolve, review, and abstain.'
+                : 'Review anything uncertain before it becomes canonical.'}
+            </p>
           </div>
           <span className="count">{memories.length}</span>
         </div>
@@ -211,6 +381,7 @@ export default function App() {
             {memories.map((memory) => (
               <MemoryCard
                 key={memory.id}
+                readOnly={demoMode}
                 memory={memory}
                 onConfirm={confirm}
                 onReject={reject}
@@ -221,7 +392,7 @@ export default function App() {
         )}
       </section>
 
-      <section className="panel right-now-panel">
+      <section className={`panel right-now-panel ${demoMode ? 'demo-hidden' : ''}`}>
         <div className="panel-heading">
           <div>
             <h2>what can I do right now?</h2>
@@ -265,6 +436,10 @@ export default function App() {
 
       <footer className="attribution">
         Place data © OpenStreetMap contributors. Live provider data may be used when configured.
+        {' · '}
+        <a href="https://github.com/kkundoor/place-memory" target="_blank" rel="noreferrer">
+          GitHub
+        </a>
       </footer>
     </main>
   );
