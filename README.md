@@ -1,28 +1,33 @@
-# place-memory
+# Place Memory
 
-**Live demo:** https://place-memory-caxs.onrender.com
+Turn a saved screenshot, note, caption, or link into a place you can find again.
 
-A small app for turning messy place saves — screenshots, notes, captions, and links — into grounded real-world places.
+[Hosted demo](https://place-memory-caxs.onrender.com) · [Architecture](docs/architecture.md) · [Field test](docs/field-test-2026-09-17.md) · [Evaluations](#evaluations) · [Run locally](#run-locally)
 
-The hosted demo runs the real extraction → candidate retrieval → resolver path for notes and screenshots, but deliberately does not persist visitor inputs or results to Place Memory storage. Fixed regression examples underneath show resolve, review, and abstain behavior.
+Gemini extracts clues, a place-search provider returns real candidates, and application code decides whether the evidence supports a match. If the evidence is weak or conflicting, Place Memory asks for review or leaves the save unresolved.
 
-The main constraint is simple: **the model can interpret evidence, but it does not get to declare a place identity by itself.**
+![Hosted Place Memory demo showing a sample note and the visitor-confirmed Detroit Institute of Arts result](docs/screenshots/hosted-demo.jpg)
 
-## how it works
+**Start with the Stow Lake example.** A screenshot used the lake's former name and pulled in unrelated roads. Adding provider-backed aliases and filtering incompatible candidates let the resolver identify Blue Heron Lake. The [before-and-after field test](docs/field-test-2026-09-17.md) shows the evidence behind that decision.
 
-```text
-saved artifact
-→ Gemini extracts a place hint from visible / provided evidence
-→ a place-search provider returns candidates
-→ candidates are normalized, filtered, enriched, and deduplicated
-→ a deterministic resolver decides:
-   resolved / needs review / unresolved
-→ in the persistent local app, the decision, candidates, score, gap, and method are stored
+The hosted demo includes built-in examples for all three outcomes. Live demo inputs may be sent to external providers for processing. The demo does not save visitor inputs or results to Place Memory storage.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A["Saved screenshot or note"] --> B["Gemini extracts clues"]
+    B --> C["Place search returns candidates"]
+    C --> D["Application filters and ranks candidates"]
+    D --> E{"How strong is the evidence?"}
+    E --> F["Resolve"]
+    E --> G["Ask for review"]
+    E --> H["Leave unresolved"]
 ```
 
-The resolver uses explicit evidence such as name, location, category, candidate separation, and provider-backed aliases. Weak or conflicting evidence goes to review or abstains instead of being silently saved as fact.
+The resolver weighs name, location, category, provider-backed aliases, and the gap between the strongest candidates. In local mode, the app saves the decision and the evidence behind it.
 
-## why the resolver is separate from the model
+## Why the resolver is separate from the model
 
 The first version relied too much on fuzzy matching and clean examples. Real tests exposed problems quickly:
 
@@ -47,7 +52,7 @@ The current resolver has:
 - provider-backed alternate / historical names
 - an explanation endpoint that exposes the evidence used for each decision
 
-## one real example
+## A real example
 
 A TikTok screenshot contained a small `STOW LAKE` logo, a San Francisco location tag, and text about renting a pedal boat.
 
@@ -72,13 +77,13 @@ category: 1.00
 
 The before/after run is documented in [`docs/field-test-2026-09-17.md`](docs/field-test-2026-09-17.md).
 
-The current input path also preserves the original screenshot alongside the interpreted result. Text can be supplied with the image as extra context, but it remains stored separately from the model's extracted evidence. A saved screenshot was live-tested through a backend restart to verify that the artifact and memory remain linked.
+The persistent local app preserves the original screenshot alongside the interpreted result. Optional user text stays separate from the model's extracted evidence. A backend restart verified that the saved screenshot and its memory remained linked.
 
-## evaluation
+## Evaluations
 
 I keep controlled resolver tests separate from live product evidence.
 
-### synthetic resolver cases
+### Synthetic resolver cases
 
 ```bash
 python evals/run_resolution_eval.py
@@ -95,7 +100,7 @@ Current fixture results:
 | false automatic resolution rate | 0% |
 | review / abstain rate | 50% |
 
-### field regression scenarios
+### Field regression scenarios
 
 ```bash
 python evals/run_field_resolution_eval.py
@@ -114,7 +119,7 @@ These are small regression sets, not a claim about production accuracy. The next
 
 See [`evals/README.md`](evals/README.md).
 
-## stack
+## Stack and deployment
 
 - React + TypeScript + Vite
 - FastAPI + Pydantic
@@ -129,7 +134,11 @@ See [`evals/README.md`](evals/README.md).
 
 Google Places / Routes remain optional. Routing uses destination coordinates so a Photon/OSM ID is never passed to Google as if it were a Google place ID. Opening-hours lookup only runs when a compatible Google place identity exists; otherwise the result stays unknown.
 
-## local setup
+The public demo runs on Render. Local mode uses SQLite and local screenshot storage. The [GCP and Terraform notes](infra/README.md) describe a proposed production deployment.
+
+## Run locally
+
+The direct setup uses Python 3.12 and Node.js 22, matching [CI](.github/workflows/api-tests.yml).
 
 ### Docker Compose
 
@@ -142,7 +151,7 @@ Open `http://localhost:5173`.
 
 Screenshot extraction requires `GEMINI_API_KEY`. Google credentials are optional.
 
-### direct processes
+### Direct processes
 
 Backend:
 
@@ -152,6 +161,7 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -161,6 +171,16 @@ Frontend:
 cd web
 npm ci
 npm run dev
+```
+
+Open `http://localhost:5173`. Text notes can use the fallback parser without a Gemini key. Add `GEMINI_API_KEY` to `api/.env` to enable model-based extraction from notes and screenshots.
+
+### Run the backend tests
+
+From `api/` with the virtual environment active:
+
+```bash
+python -m pytest -q
 ```
 
 ## API highlights
@@ -173,7 +193,7 @@ npm run dev
 - `GET /api/memories/{id}/resolution`
 - `POST /api/feasible`
 
-## current limits
+## Current limits
 
 This is still an engineering prototype, not a production service.
 
