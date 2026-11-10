@@ -11,18 +11,40 @@ logger = logging.getLogger('place_memory.place_search')
 
 
 class AliasEnrichedPlaceSearchClient:
-    """Search with one provider, then enrich returned OSM objects with alternate names."""
+    """Photon search with optional Nominatim failover and best-effort OSM aliases."""
 
-    def __init__(self, search_client, alias_client):
+    def __init__(self, search_client, alias_client, fallback_client=None):
         self.search_client = search_client
         self.alias_client = alias_client
+        self.fallback_client = fallback_client
 
     @property
     def enabled(self) -> bool:
-        return bool(self.search_client.enabled)
+        return bool(
+            self.search_client.enabled
+            or (self.fallback_client is not None and self.fallback_client.enabled)
+        )
 
     async def search_places(self, hint: PlaceHint) -> list[RawPlace]:
-        places = await self.search_client.search_places(hint)
+        try:
+            places = await self.search_client.search_places(hint)
+        except httpx.HTTPError as primary_error:
+            if self.fallback_client is None or not self.fallback_client.enabled:
+                raise
+
+            logger.warning(
+                'primary_place_search_failed provider=photon error_type=%s; trying_fallback=nominatim',
+                type(primary_error).__name__,
+            )
+            try:
+                return await self.fallback_client.search_places(hint)
+            except httpx.HTTPError as fallback_error:
+                logger.error(
+                    'fallback_place_search_failed provider=nominatim error_type=%s',
+                    type(fallback_error).__name__,
+                )
+                raise fallback_error from primary_error
+
         if not places or not self.alias_client.enabled:
             return places
 
