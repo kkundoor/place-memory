@@ -46,8 +46,8 @@ asset_store = LocalAssetStore(settings.upload_dir)
 maps = GoogleMapsClient(settings.google_maps_api_key)
 photon = PhotonClient(settings.photon_base_url, settings.photon_user_agent)
 nominatim = NominatimClient(settings.nominatim_base_url, settings.nominatim_user_agent)
-photon_with_aliases = AliasEnrichedPlaceSearchClient(photon, nominatim)
-place_search = maps if maps.enabled else photon_with_aliases if photon.enabled else nominatim
+photon_with_aliases = AliasEnrichedPlaceSearchClient(photon, nominatim, fallback_client=nominatim)
+place_search = maps if maps.enabled else photon_with_aliases if photon_with_aliases.enabled else nominatim
 extractor = GeminiExtractor(settings)
 
 app = FastAPI(title='place memory api', version='0.4.0')
