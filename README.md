@@ -6,8 +6,8 @@ Turn a saved screenshot, note, caption, or link into a place you can find again.
 
 Gemini extracts clues, a place-search provider returns real candidates, and application code decides whether the evidence supports a match. If the evidence is weak or conflicting, Place Memory asks for review or leaves the save unresolved.
 
-![Hosted Place Memory demo showing a sample note and the visitor-confirmed Detroit Institute of Arts result](docs/screenshots/hosted-demo.jpg)
-
+![Hosted Place Memory demo showing a sample note](docs/screenshots/homepage.png)
+![Hosted Place Memory demo showing visitor-confirmed Michigan Stadium result](docs/screenshots/testDemoResult.png)
 **Start with the Stow Lake example.** A screenshot used the lake's former name and pulled in unrelated roads. Adding provider-backed aliases and filtering incompatible candidates let the resolver identify Blue Heron Lake. The [before-and-after field test](docs/field-test-2026-09-17.md) shows the evidence behind that decision.
 
 The hosted demo includes built-in examples for all three outcomes. Live demo inputs may be sent to external providers for processing. The demo does not save visitor inputs or results to Place Memory storage.
